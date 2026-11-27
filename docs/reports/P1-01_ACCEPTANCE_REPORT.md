@@ -26,7 +26,7 @@
 | `A01.2-REAL-MANAGER-LIVE` | `0C3F0ACC...1558A6` | Windows Chrome `158.0.8127.37` / 真实 Tampermonkey `5.5.1` × 匿名只读真实 B 站（拦截非 GET/HEAD 与登录请求） | 停用复核 | 在同一隔离配置启用状态下访问真实 `www.bilibili.com/` 与 `search.bilibili.com/all?keyword=音乐`；在 Dashboard 停用后重访真实 `www.bilibili.com/` | 主站与搜索成功注入且无壳重复；停用后真实 B 站原版页面与顶栏正常可用 | `www.bilibili.com`：`shells=1`、`msgCount=20`；`search.bilibili.com`：`searchViews=1`、`title="搜索 - 飞书"`；停用后：`shells=0`、`hasImTheme=false`、`title="哔哩哔哩 (゜-゜)つロ 干杯~-bilibili"`、`hasNativeHeader=true`（被屏蔽第三方请求之 `livePageErrors` 已单列）；留存截图 `08`–`10` | `EV-P101-TM-LIVE` | **PASS** |
 | `A01.2-FIREFOX` | `0C3F0ACC...1558A6` | Windows 11 Firefox | 不适用 | Firefox 兼容复核 | 纳入 P1-08 兼容矩阵 | 本机未安装 Firefox（`C:\Program Files\Mozilla Firefox` 缺失），未执行 | `EV-P101-FF-NA` | **NOT TESTED** |
 | `A01-CI-LOCAL` | `0C3F0ACC...1558A6` | Windows 11 本地等价 `.github/workflows/ci.yml` 步骤 | 不适用 | 运行 `npm.cmd run build`、`git diff --exit-code dist/DingBili.user.js`、`npm.cmd run test:unit`、`npm.cmd run verify:repro` | 全部本地 CI 步骤通过且产物无漂移 | 全部步骤通过，`dist/DingBili.user.js` SHA-256 与提交产物完全一致 | `EV-P101-CI-LOCAL` | **PASS** |
-| `A01-CI-GITHUB` | `0C3F0ACC...1558A6` | GitHub Actions `CI / build-and-verify`（PR `#1`: `https://github.com/meredithfyc1001/DingBili/pull/1`） | 不适用 | 在 GitHub PR `#1` 页面核查 `CI / build-and-verify`（`push` 与 `pull_request`）运行结果 | 云端 Runner 执行 `ci.yml` 通过 | 运行 `#4`（`actions/runs/45965228882/job/140392203302`）在 3 秒后未启动 Runner 即报错：`The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`（非代码错误） | `EV-P101-CI-GH-BLK` | **BLOCKED** |
+| `A01-CI-GITHUB` | `0C3F0ACC...1558A6` | GitHub Actions `CI / build-and-verify`（PR `#1`: `https://github.com/meredithfyc1001/DingBili/pull/1`） | 不适用 | 仓库改为 `Public` 后核查工作流使用标准 GitHub-hosted Runner（`ubuntu-latest`），重跑 PR `#1` 最新提交 `3cb75e0` 检查 | 云端标准 Runner 启动并执行 `ci.yml` 全步骤通过 | **PASS**：仓库确认为 `Public`、`runner=GitHub Actions 1000000376`（`runner_group=GitHub Actions`，`labels=ubuntu-latest`，非 Larger Runner）；Run `#6`（`actions/runs/45966610240`，`attempt=2`，Job `140414855148`，耗时 `11s`）真实启动并执行完 `#1 Set up job` → `#8 Verify reproducible build` → `#17 Complete job` 全部步骤，结论 `success`（仅非阻塞 Node 20 弃用提示） | `EV-P101-CI-GH` | **PASS** |
 
 ### F1–F4 基线状态记录（P1-01 冻结基线，由 P1-02 负责修复关闭）
 
@@ -63,14 +63,14 @@
 
 ## 三、阶段验收结论
 
-- **结论**：**P1-01 本地全部工程与实装验收项 PASS；GitHub PR `#1`（https://github.com/meredithfyc1001/DingBili/pull/1 ，状态 `Open` / `No conflicts`）已创建，因云端 GitHub Actions 账户账单/限额限制处于 `BLOCKED`，PR `#1` 暂保留开启不强行合并，P1-02 将基于 `feat/p1-01-baseline-build` 叠栈分支继续推进**。
+- **结论**：**P1-01 全部必需验收项（含真实 Chrome + Tampermonkey `5.5.1` 实装、本地等价 CI 及 Public 仓库下 GitHub Actions 云端标准 Runner `CI / build-and-verify`）均已 PASS，PR `#1`（https://github.com/meredithfyc1001/DingBili/pull/1 ）已具备合并至 `main` 条件**。
 - **已验证并分开登记的证据**：
   1. **静态、可复现构建与本地 CI 等价检查（`A01-CI-LOCAL`）**：`npm.cmd run test:unit` **8/8 PASS**，`npm.cmd run verify:repro` **PASS**（`dist/DingBili.user.js` SHA-256 `0C3F0ACC6E680B6DB10ADBF8BE8357DF2703F85B11904A986C0E763EBC1558A6`，上游只读快照无变更）。
-  2. **Playwright `addInitScript` × 合成样本（Chrome 158 + Edge 158）**：**18/18 PASS**，锁定 `PB-01`–`PB-09` 保留行为与 `KF-01`–`KF-12` 已知基线失败。
-  3. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 合成样本**：**PASS**（元数据安装弹窗、主站/搜索匹配、`@noframes` iframe、未适配路由、停用后原版可用、重启用单壳，0 异常）。
-  4. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 匿名只读真实 B 站**：**PASS**（主站 20 条推荐注入、搜索视图注入、停用后原版 B 站完整可用）。
-- **明确记录的阻塞与未测范围**：
-  - `A01-CI-GITHUB`：**BLOCKED**（GitHub Actions 账单/消费限额拦截，待仓库所有者在 Billing & plans 恢复配额或豁免云端 CI 后即可合并 PR `#1`）。
+  2. **GitHub Actions 云端 CI（`A01-CI-GITHUB`）**：仓库转为 `Public` 后，Run `#6`（`actions/runs/45966610240`，`attempt=2`）在标准 `ubuntu-latest` Runner（`GitHub Actions 1000000376`）成功执行全步骤并通过（`conclusion=success`）。
+  3. **Playwright `addInitScript` × 合成样本（Chrome 158 + Edge 158）**：**18/18 PASS**，锁定 `PB-01`–`PB-09` 保留行为与 `KF-01`–`KF-12` 已知基线失败。
+  4. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 合成样本**：**PASS**（元数据安装弹窗、主站/搜索匹配、`@noframes` iframe、未适配路由、停用后原版可用、重启用单壳，0 异常）。
+  5. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 匿名只读真实 B 站**：**PASS**（主站 20 条推荐注入、搜索视图注入、停用后原版 B 站完整可用）。
+- **明确记录的未测范围与基线边界**：
   - `A01.2-FIREFOX`：**NOT TESTED**（本机未安装 Firefox，划归 P1-08 兼容矩阵）。
   - `KF-01`–`KF-12` 作为已知上游缺陷保留基线记录，依依赖关系分别由 P1-02 至 P1-07 关闭。
-- **下一步**：在叠栈分支 `feat/p1-02-routing-lifecycle` 上启动 **P1-02（路由、生命周期与切回原版）**。
+- **下一步**：合并 PR `#1` 至 `main` 并推进 `feat/p1-02-routing-lifecycle` 叠栈分支与 PR `#2` 合并管理。

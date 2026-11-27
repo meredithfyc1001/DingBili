@@ -29,7 +29,7 @@
 | `A02-REAL-TM-LIVE` | `CB74868A...263C` | Windows Chrome `158.0.8127.37` + 真实 Tampermonkey `5.5.1` MV3 × 匿名只读真实 B 站 | 停用复核 | 隔离配置访问真实 `www.bilibili.com/` 与 `search.bilibili.com/all?keyword=音乐`，并在 Dashboard 停用后重访 `www.bilibili.com/` | 主站与搜索单壳可用，停用后真实 B 站页面与顶栏完整可用 | `www.bilibili.com`: `shells=1`, `hasImTheme=true`, `msgCount=8`; `search.bilibili.com`: `searchViews=1`, `title="搜索 - 飞书"`; 停用后: `shells=0`, `hasImTheme=false`, `title="哔哩哔哩 (゜-゜)つロ 干杯~-bilibili"`, `hasNativeHeader=true`（被屏蔽非 GET/三方请求产生之 `livePageErrors` 已单列） | `EV-P102-TM-LIVE` | **PASS** |
 | `A02-FIREFOX` | `CB74868A...263C` | Windows 11 Firefox | 不适用 | Firefox 兼容测试 | 纳入 P1-08 兼容矩阵 | 本机未安装 Firefox，未执行 | `EV-P102-FF-NA` | **NOT TESTED** |
 | `A02-CI-LOCAL` | `CB74868A...263C` | Windows 11 本地等价 `ci.yml` 步骤（提交 `b99252f`） | 不适用 | 执行 `npm.cmd run build`、`git diff --exit-code dist/DingBili.user.js`、`npm.cmd run test:unit`、`npm.cmd run verify:repro` 并检查上游快照状态 | 全部通过且工作区产物无漂移 | 全部步骤退出码 0，`dist/DingBili.user.js` 与提交产物零差异，14/14 单测 PASS，双洁净构建 SHA-256 `CB74868A...263C` PASS | `EV-P102-CI-LOCAL` | **PASS** |
-| `A02-CI-GITHUB` | `CB74868A...263C` | GitHub PR 创建 & Actions `CI / build-and-verify` | 不适用 | 推送分支后调用 `browser` 子代理打开 Compare 页面创建叠栈 PR（base `feat/p1-01-baseline-build`）并检查云端 CI | 获取真实 `/pull/<number>` PR 与云端 CI 状态 | 分支已推送至 `origin/feat/p1-02-routing-lifecycle`；旧/新 `browser` 子代理均报错 `conversation is not open in any Hub window; please open this conversation in a Hub window and try again`（`BROWSER_HOST_FACTS: visited_origins=none`），且本机无 `gh` CLI，**PR 尚未创建**（Compare 入口仅作人工/后续创建参考：`https://github.com/meredithfyc1001/DingBili/compare/feat/p1-01-baseline-build...feat/p1-02-routing-lifecycle?expand=1`；另 GitHub Actions 账户账单阻塞仍待所有者处理） | `EV-P102-CI-GH-BLK` | **BLOCKED** |
+| `A02-CI-GITHUB` | `CB74868A...263C` | GitHub Actions `CI / build-and-verify`（PR `#2`: `https://github.com/meredithfyc1001/DingBili/pull/2`） | 不适用 | 仓库转为 `Public` 后重跑提交 `05f72db` 的 CI、正式创建叠栈 PR `#2`，并在 PR `#1` 合入 `main` 后改基为 `main` 复测 `pull_request` CI | 标准 `ubuntu-latest` Runner 启动执行全部步骤且 PR `#2` 检查全绿 | **PASS**：仓库确认为 `Public`，`runner=GitHub Actions 1000000377`（`runner_group=GitHub Actions`，`labels=ubuntu-latest`，非 Larger Runner）；Run `#8`（`actions/runs/45969293738`，`attempt=2`，Job `140415093983`，耗时 `24s`）完整执行 `#1 Set up job` → `#8 Verify reproducible build` → `#17 Complete job` 全部步骤并通过（仅非阻塞 Node 20 弃用提示）；PR `#2` 已正式创建并随 PR `#1` 合入 `main` 后改基为 `main` 复测合入 | `EV-P102-CI-GH` | **PASS** |
 
 ### 边界与未混淆说明
 1. **合成测试 vs 真实用户脚本管理器 vs 匿名只读真实 B 站**：上述表项分别单独列出 Playwright `addInitScript`（24/24）、Tampermonkey `5.5.1` × 合成样本，与 Tampermonkey `5.5.1` × 匿名只读真实 B 站实测结果，未用任何一项替代另一项。
@@ -61,7 +61,7 @@
 
 ## 三、阶段验收结论
 
-- P1-02 所有本地工程实现、`tests/unit`（14/14）、双洁净目录可复现构建与本地 CI 等价检查（`b99252f`，SHA-256 `CB74868A33F85178CE8FDF43457A0D0D2AC9E87D83C93A349A790E0B60FF263C`）、Chrome+Edge 全量 E2E（24/24，含 P1-01 回归与 P1-02 新增 A02 全用例及 20 次往返压测）与真实 Chrome 158 + Tampermonkey `5.5.1` 验收（合成 + 匿名只读真实 B 站）已全部通过；分支已推送至 `origin/feat/p1-02-routing-lifecycle`。
-- **外部平台阻塞与未测范围**：
-  - `A02-CI-GITHUB`（GitHub PR 创建与云端 CI）：**BLOCKED** — 当前内置浏览器 Hub 未打开本会话窗口且本机未安装 `gh` CLI，无法自动创建 PR（未把 `/compare/...` 入口当作已创建 PR）；需在 Hub 窗口重新打开会话或由项目所有者手动通过 `https://github.com/meredithfyc1001/DingBili/compare/feat/p1-01-baseline-build...feat/p1-02-routing-lifecycle?expand=1` 创建以 `feat/p1-01-baseline-build` 为基的叠栈 PR，并处理 GitHub 账户账单/限额以便恢复 Actions Runner。
+- **结论**：**P1-02 所有必需验收项（单元测试 14/14、双洁净目录可复现构建、本地 CI 等价检查、Chrome+Edge 全量 E2E 24/24、真实 Chrome 158 + Tampermonkey `5.5.1` 合成与匿名只读真实 B 站实测，以及 Public 仓库标准 `ubuntu-latest` Runner `CI / build-and-verify`）均已 PASS**；PR `#2`（https://github.com/meredithfyc1001/DingBili/pull/2 ）已正式创建，在合入 PR `#1` 后的最新 `main` 基线上改基复测通过即可合并至 `main`。
+- **明确记录的未测范围与基线边界**：
   - `A02-FIREFOX`：**NOT TESTED**（本机未安装 Firefox，留待 P1-08）。
+  - 真实 HTTP BFCache 命中边界与合成 `PageTransitionEvent(persisted:true)` 已分别记录；`KF-03`–`KF-12` 保留给 P1-03 至 P1-07。
