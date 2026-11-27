@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +27,17 @@ function main() {
   const chromePath = findChrome();
   fs.mkdirSync(profileDir, { recursive: true });
 
+  const chromeArgs = [
+    `--user-data-dir=${profileDir}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-session-crashed-bubble',
+    '--new-window',
+    '--window-size=1280,860',
+    EXT_DETAILS_URL,
+    CWS_URL,
+  ];
+
   console.log('=== DingBili · Real Windows Chrome + Tampermonkey Isolated Setup ===');
   console.log(`Chrome executable : ${chromePath}`);
   console.log(`Isolated profile  : ${profileDir} (zero personal data / cookies / credentials)`);
@@ -37,24 +48,32 @@ function main() {
   console.log('  3. Close the Chrome window completely so settings flush to disk, then run: npm.cmd run test:tm:chrome');
   console.log('');
 
-  const child = spawn(
-    chromePath,
-    [
-      `--user-data-dir=${profileDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      CWS_URL,
-      EXT_DETAILS_URL,
-    ],
-    {
-      stdio: 'ignore',
-      detached: false,
-    },
-  );
+  if (process.platform === 'win32') {
+    const psScript = [
+      '$rawArgs = $env:DINGBILI_CHROME_ARGS_JSON | ConvertFrom-Json',
+      '$quoted = @($rawArgs | ForEach-Object { if ($_ -match "\\s") { "`"$_`"" } else { "$_" } })',
+      'Start-Process -FilePath $env:DINGBILI_CHROME -ArgumentList $quoted -WindowStyle Normal -Wait',
+    ].join('; ');
 
-  child.on('exit', (code) => {
-    console.log(`[setup:tm:chrome] Chrome exited with code ${code ?? 0}. Ready for: npm.cmd run test:tm:chrome`);
+    console.log('[setup:tm:chrome] Launching Windows Chrome with -WindowStyle Normal -Wait...');
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', psScript], {
+      env: {
+        ...process.env,
+        DINGBILI_CHROME: chromePath,
+        DINGBILI_CHROME_ARGS_JSON: JSON.stringify(chromeArgs),
+      },
+      stdio: 'inherit',
+    });
+    console.log('[setup:tm:chrome] Chrome exited cleanly. Ready for: npm.cmd run test:tm:chrome');
+    return;
+  }
+
+  const child = spawn(chromePath, chromeArgs, {
+    stdio: 'ignore',
+    detached: true,
   });
+  child.unref();
+  console.log(`[setup:tm:chrome] Launched Chrome PID=${child.pid ?? 'unknown'}.`);
 }
 
 main();

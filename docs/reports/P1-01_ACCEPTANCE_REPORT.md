@@ -21,8 +21,9 @@
 | `A01.1-E2E-CHROME` | `0C3F0ACC...1558A6` | Chrome `158.0.8127.37` / `FX-HOME`..`FX-PERF`（1440×900 & 900×800） | F1–F4 基线对照 | 回放 `T01`–`T07`、`KF-01`–`KF-12` 及上游 `bilishu.user.js` 行为对照 | 保留行为 `PB-01`–`PB-09` 全过；已知失败 `KF-01`–`KF-12` 全部可重跑复现；0 未捕获异常 | Chrome 9/9 E2E 通过，0 `pageerror` | `EV-P101-E2E-CR` | **PASS** |
 | `A01.1-E2E-EDGE` | `0C3F0ACC...1558A6` | Edge `158.0.4370.33` / `FX-HOME`..`FX-PERF`（1440×900 & 900×800） | F1–F4 基线对照 | 回放 `T01`–`T07`、`KF-01`–`KF-12` 及上游 `bilishu.user.js` 行为对照 | 与 Chrome 基线一致，0 未捕获异常 | Edge 9/9 E2E 通过，0 `pageerror` | `EV-P101-E2E-ED` | **PASS** |
 | `A01.2-REPRO-BUILD` | `0C3F0ACC...1558A6` | Windows 11 / Node 24.22.1 / 两份独立临时目录 | 不适用 | 在两个全新临时目录拷贝源码与 `package-lock.json`，分别执行 `npm ci` + `npm run build`，比较 `dist/` 目录、SHA-256、首部元数据与 MIT 许可 | `dist/` 仅含 `DingBili.user.js`；两次构建哈希与工作区产物完全一致；元数据与权限无扩张、MIT 完整、零外部依赖 | `buildA === buildB === workspace === 0C3F0ACC6E680B6DB10ADBF8BE8357DF2703F85B11904A986C0E763EBC1558A6`，`dist/` 仅 1 文件 | `EV-P101-REPRO` | **PASS** |
-| `A01.2-LOAD-ISOLATION` | `0C3F0ACC...1558A6` | Chrome 158 & Edge 158 / `FX-IFRAME`、`FX-UNSUPPORTED`（Playwright `addInitScript` 注入） | F1–F4 详见下表 | 打开顶层匹配页、内嵌匹配 iframe 页及未适配页 | 顶层页恰挂 1 套壳；iframe 内 0 套壳；未适配页 0 套壳且原生按钮可点击 | Chrome 与 Edge 均实测顶层 1 壳、iframe 0 壳、未适配页原生点击计数 = 1 | `EV-P101-LOAD` | **PASS** |
-| `A01.2-REAL-MANAGER` | `0C3F0ACC...1558A6` | Windows Chrome `158.0.8127.37` / Tampermonkey MV3 `v5.5.1`（`dhdgffkkebhmkfjojejmpbldmpobfkfo`） | F2/F4 停用复核 | 通过独立隔离配置安装 Tampermonkey 并启用“允许用户脚本”，实测安装 `dist/DingBili.user.js`、核对元数据、主站与搜索子域匹配、`@noframes` iframe 不重复注入及停用后原版可用性 | **阻塞（BLOCKED）**：已从官方更新源核验 Tampermonkey `v5.5.1`（CRX3 SHA-256 `B5167937817E636ADEBA462ED9BF9B32FF01C2888F78A9AFC6AA4F8E655FE872`，MV3，`userScripts`）；实测 Windows Chrome 158 正式版已移除 `--load-extension`（0 扩展加载），且 Edge 158 探针证实未经人工开启“允许用户脚本（Allow User Scripts）”前 `chrome.userScripts` 为 `false`。受安全约束不得读取个人浏览器配置或篡改 Chrome 扩展授权状态，已备好隔离脚本 `npm.cmd run setup:tm:chrome` 与 `npm.cmd run test:tm:chrome` 等待人工完成一次扩展安装与授权 | `EV-P101-TM-BLOCKED` | **BLOCKED** |
+| `A01.2-LOAD-ISOLATION` | `0C3F0ACC...1558A6` | Chrome 158 & Edge 158 / `FX-IFRAME`、`FX-UNSUPPORTED`（Playwright `addInitScript` × 合成样本） | F1–F4 详见下表 | 打开顶层匹配页、内嵌匹配 iframe 页及未适配页 | 顶层页恰挂 1 套壳；iframe 内 0 套壳；未适配页 0 套壳且原生按钮可点击 | Chrome 与 Edge 均实测顶层 1 壳、iframe 0 壳、未适配页原生点击计数 = 1 | `EV-P101-LOAD` | **PASS** |
+| `A01.2-REAL-MANAGER-SYNTHETIC` | `0C3F0ACC...1558A6` | Windows Chrome `158.0.8127.37` / 真实 Tampermonkey `5.5.1`（MV3，`dhdgffkkebhmkfjojejmpbldmpobfkfo`）× 合成样本 | F2/F4 停用复核 | 隔离配置开启“允许用户脚本”，从本地 HTTP 源触发 `ask.html` 弹窗安装 `dist/DingBili.user.js`，依次测主站、搜索子域、iframe、`/unsupported`、Dashboard 停用与重新启用 | 安装弹窗解析名/版本/匹配域；顶层与搜索各 1 壳；子 iframe 0 壳；停用后恢复 `Fixture Native`；重启用单壳，0 异常 | `injectionMode=real-tampermonkey-extension`；主站 `shells=1/msgCount=1`；搜索 `searchViews=1`；iframe `top=1/child=0`；停用后 `shells=0`、`title="Fixture Native"`、`favicon="data:,native"`、`nativeButtonClicks=1`、输入正常；重启用 `shells=1`；`pageErrors=[]`；留存截图 `01`–`07` 与 `evidence.json` | `EV-P101-TM-SYN` | **PASS** |
+| `A01.2-REAL-MANAGER-LIVE` | `0C3F0ACC...1558A6` | Windows Chrome `158.0.8127.37` / 真实 Tampermonkey `5.5.1` × 匿名只读真实 B 站（拦截非 GET/HEAD 与登录请求） | 停用复核 | 在同一隔离配置启用状态下访问真实 `www.bilibili.com/` 与 `search.bilibili.com/all?keyword=音乐`；在 Dashboard 停用后重访真实 `www.bilibili.com/` | 主站与搜索成功注入且无壳重复；停用后真实 B 站原版页面与顶栏正常可用 | `www.bilibili.com`：`shells=1`、`msgCount=20`；`search.bilibili.com`：`searchViews=1`、`title="搜索 - 飞书"`；停用后：`shells=0`、`hasImTheme=false`、`title="哔哩哔哩 (゜-゜)つロ 干杯~-bilibili"`、`hasNativeHeader=true`（被屏蔽第三方请求之 `livePageErrors` 已单列）；留存截图 `08`–`10` | `EV-P101-TM-LIVE` | **PASS** |
 | `A01.2-FIREFOX` | `0C3F0ACC...1558A6` | Windows 11 Firefox | 不适用 | Firefox 兼容复核 | 纳入 P1-08 兼容矩阵 | 本机未安装 Firefox（`C:\Program Files\Mozilla Firefox` 缺失），未执行 | `EV-P101-FF-NA` | **NOT TESTED** |
 
 ### F1–F4 基线状态记录（P1-01 冻结基线，由 P1-02 负责修复关闭）
@@ -54,12 +55,17 @@
 3. 初版 E2E 的 `T05` 在 Chrome 158 无头模式下因离屏 Canvas `-9999px` 录制出 0 字节导致超时；已调整 Canvas 至视口内低透明层并补全 `srcObject` 安全回退，在 Chrome 与 Edge 均稳定在 ~1.5s 完成真实帧推进验证。
 4. 初版 E2E 的 `T06` 命中了不可见的悬停按钮导致 strict mode / 超时；已精准定位行内可见 `.im-inline-reply[data-action="native-reply"]`。
 5. 自审检查发现 `KF-09`（钉钉顶栏头像静态无响应）和 `KF-11 / DM4`（`expandAllComments` 滚页一次返回 0）缺少自动化断言，已补充进 `tests/e2e/p1-01-baseline.spec.mjs` 并在最终全量测试中通过。
-6. **A01.2 真实用户脚本管理器安装缺口与解锁工具**：经实测 Chrome `158.0.8127.37` 正式版不支持命令行 `--load-extension` 且 MV3 Tampermonkey `v5.5.1` 依赖 Chrome 138+ 单扩展“允许用户脚本”授权；新增隔离配置引导脚本 `scripts/setup-tampermonkey-chrome.mjs`（`npm.cmd run setup:tm:chrome`）与全自动实测验证脚本 `scripts/verify-tampermonkey-chrome.mjs`（`npm.cmd run test:tm:chrome`），绝不触碰个人配置或绕过权限检查，严格维持 `A01.2-REAL-MANAGER` 为 `BLOCKED` 直到人工完成商店安装与授权并复跑通过。
+6. **A01.2 真实用户脚本管理器（Tampermonkey）安装与验证闭环**：经隔离配置（`.cache/chrome-tampermonkey-profile`，`dhdgffkkebhmkfjojejmpbldmpobfkfo`，`v5.5.1`）由人工从 Chrome 应用商店完成安装并开启“允许用户脚本”授权；修复了测试驱动中 Playwright 默认 `--disable-extensions` 抑制扩展加载以及 Tampermonkey Dashboard 误选中批量复选框导致未点中 `tr.scripttr .enabler` 的问题。最终 `npm.cmd run test:tm:chrome` 在**真实 Tampermonkey 扩展注入**下对**合成样本**与**匿名只读真实 B 站**分别实测全部通过（`evidence.json` + 截图 `01`–`10`）。
 
 ---
 
 ## 三、阶段验收结论
 
-- **结论**：**待补完 A01.2 真实 Tampermonkey 安装验证（BLOCKED on manual Chrome extension install & Allow User Scripts consent）**；当前 PR 未合并，P1-02 未启动。
-- **已达标项**：所有 9 项保留行为（`PB-01`–`PB-09`）、全部 12 项 P1 已知待修缺陷（`KF-01`–`KF-12`）、双洁净目录可复现构建、上游只读快照校验及 Chrome/Edge 18 项 E2E 均已实测通过。
-- **阻塞项（A01.2-REAL-MANAGER）解锁路径**：待项目所有者运行 `npm.cmd run setup:tm:chrome` 在隔离配置 `.cache/chrome-tampermonkey-profile` 安装 Tampermonkey 并开启“允许用户脚本”后，由本机执行 `npm.cmd run test:tm:chrome` 完成真实元数据解析、主站/搜索匹配、iframe 不重复注入与停用后原版可用性验证，再闭环签收 P1-01。
+- **结论**：**PASS（P1-01 全部必需验收项已达标）**。
+- **已验证并分开登记的四类证据**：
+  1. **静态与可复现构建**：`npm.cmd run test:unit` **8/8 PASS**，`npm.cmd run verify:repro` **PASS**（`dist/DingBili.user.js` SHA-256 `0C3F0ACC6E680B6DB10ADBF8BE8357DF2703F85B11904A986C0E763EBC1558A6`，上游只读快照无变更）。
+  2. **Playwright `addInitScript` × 合成样本（Chrome 158 + Edge 158）**：**18/18 PASS**，锁定 `PB-01`–`PB-09` 保留行为与 `KF-01`–`KF-12` 已知基线失败。
+  3. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 合成样本**：**PASS**（元数据安装弹窗、主站/搜索匹配、`@noframes` iframe、未适配路由、停用后原版可用、重启用单壳，0 异常）。
+  4. **真实 Tampermonkey `v5.5.1`（Windows Chrome 158）× 匿名只读真实 B 站**：**PASS**（主站 20 条推荐注入、搜索视图注入、停用后原版 B 站完整可用）。
+- **明确记录的未测范围**：`A01.2-FIREFOX`（本机未安装 Firefox，划归 P1-08 兼容矩阵）；`KF-01`–`KF-12` 仍作为已知上游缺陷保留基线记录，依依赖关系分别由 P1-02 至 P1-07 关闭。
+- **下一步**：提交验收更新并推进 GitHub PR 创建、CI 核验与授权合并，随后启动 **P1-02（路由、生命周期与切回原版）**。

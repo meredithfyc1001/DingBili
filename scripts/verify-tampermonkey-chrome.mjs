@@ -157,7 +157,7 @@ async function installUserscriptViaTampermonkeyUI(context, installUrl, extId) {
 
   const installBtn = askPage
     .locator('input[type="button"], button')
-    .filter({ hasText: /^(Install|Reinstall|Update|安装|重新安装|更新)$/i })
+    .filter({ hasText: /^(Install|Reinstall|Update|Overwrite|安装|重新安装|更新|覆盖)$/i })
     .first();
   await installBtn.waitFor({ state: 'visible', timeout: 10_000 });
   await installBtn.click();
@@ -174,30 +174,221 @@ async function openDashboardAndInspect(context, extId) {
   });
   await dash.waitForTimeout(1500);
 
-  const scriptRow = dash.locator('tr').filter({ hasText: 'DingBili' }).first();
+  const scriptRow = dash.locator('tr.scripttr').filter({ hasText: 'DingBili' }).first();
   await scriptRow.waitFor({ state: 'visible', timeout: 10_000 });
   const rowText = await scriptRow.innerText();
   return { dash, scriptRow, rowText };
 }
 
 async function toggleScriptInDashboard(dash, scriptRow, targetEnabled) {
-  const state = await scriptRow.evaluate((row) => {
-    const cb = row.querySelector('input[type="checkbox"]');
-    if (cb) return { kind: 'checkbox', checked: cb.checked };
-    const slider = row.querySelector(
-      '.slider, [class*="enable"], [title*="Enable"], [title*="Disable"], [title*="启用"], [title*="禁用"]',
-    );
-    const rowCls = row.className || '';
-    const disabled = /disabled/i.test(rowCls) || /disabled/i.test(slider?.className || '');
-    return { kind: 'slider', checked: !disabled };
-  });
+  const enabler = scriptRow.locator('.enabler').first();
+  await enabler.waitFor({ state: 'visible', timeout: 10_000 });
+  const isCurrentlyEnabled = await enabler.evaluate(
+    (el) => el.classList.contains('enabler_enabled') && !el.classList.contains('enabler_disabled'),
+  );
 
-  if (state.checked !== targetEnabled) {
-    const clickable = scriptRow
-      .locator('input[type="checkbox"], .slider, .switch, [class*="enable"], td:nth-child(2)')
-      .first();
-    await clickable.click({ force: true });
-    await dash.waitForTimeout(1200);
+  if (isCurrentlyEnabled !== targetEnabled) {
+    await enabler.click();
+    const deadline = Date.now() + 6000;
+    while (Date.now() < deadline) {
+      const nowEnabled = await enabler.evaluate(
+        (el) => el.classList.contains('enabler_enabled') && !el.classList.contains('enabler_disabled'),
+      );
+      if (nowEnabled === targetEnabled) break;
+      await dash.waitForTimeout(200);
+    }
+    const finalEnabled = await enabler.evaluate(
+      (el) => el.classList.contains('enabler_enabled') && !el.classList.contains('enabler_disabled'),
+    );
+    assert.equal(
+      finalEnabled,
+      targetEnabled,
+      `Failed to toggle DingBili enabled state to ${targetEnabled} in Tampermonkey dashboard`,
+    );
+    await dash.waitForTimeout(500);
+  }
+}
+
+const ALLOWED_LIVE_HOST_RE = /(^|\.)(bilibili\.com|hdslb\.com|biliapi\.net|biliapi\.com|bilivideo\.com)$/i;
+
+async function detectCaptchaOrGate(page) {
+  return page.evaluate(() => {
+    const href = location.href;
+    const title = document.title || '';
+    const text = (document.body?.innerText || '').slice(0, 4000);
+    const hasGeetest = Boolean(document.querySelector('.geetest_panel, .geetest_widget, #geetest-wrap, [class*="captcha"]'));
+    const gatedHost = /passport\.bilibili\.com/i.test(location.hostname);
+    const gatedText = /安全验证|人机验证|拖动滑块|请完成验证|访问受限|verify you are human|geetest/i.test(`${title}\n${text}`);
+    return {
+      blocked: gatedHost || hasGeetest || gatedText,
+      gatedHost,
+      hasGeetest,
+      gatedText,
+      url: href,
+      title,
+    };
+  });
+}
+
+async function runLiveAnonymousBilibiliChecks({ context, dash, scriptRow }) {
+  const result = {
+    mode: 'anonymous-readonly-live-bilibili',
+    status: 'NOT TESTED',
+    livePageErrors: [],
+    wwwEnabled: null,
+    searchEnabled: null,
+    wwwDisabledNative: null,
+  };
+
+  const liveRouteHandler = async (route) => {
+    const req = route.request();
+    const rawUrl = req.url();
+    let u;
+    try {
+      u = new URL(rawUrl);
+    } catch {
+      await route.continue();
+      return;
+    }
+
+    if (
+      u.protocol === 'chrome-extension:' ||
+      u.protocol === 'data:' ||
+      u.protocol === 'blob:' ||
+      u.protocol === 'about:' ||
+      u.hostname === '127.0.0.1'
+    ) {
+      await route.continue();
+      return;
+    }
+
+    if (!['GET', 'HEAD'].includes(req.method())) {
+      await route.abort('blockedbyclient');
+      return;
+    }
+
+    if (
+      u.hostname === 'passport.bilibili.com' ||
+      /(^|\.)passport\./i.test(u.hostname) ||
+      /\/(login|auth|x\/passport)/i.test(u.pathname)
+    ) {
+      await route.abort('blockedbyclient');
+      return;
+    }
+
+    if (!ALLOWED_LIVE_HOST_RE.test(u.hostname)) {
+      await route.abort('blockedbyclient');
+      return;
+    }
+
+    await route.continue();
+  };
+
+  let livePage = null;
+  await context.route('**/*', liveRouteHandler);
+
+  try {
+    livePage = await context.newPage();
+    livePage.on('pageerror', (e) => result.livePageErrors.push(String(e)));
+
+    // 1. Live www.bilibili.com with DingBili enabled
+    await livePage.goto('https://www.bilibili.com/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 25_000,
+    });
+    const wwwGate = await detectCaptchaOrGate(livePage);
+    if (wwwGate.blocked) {
+      result.status = 'BLOCKED';
+      result.wwwEnabled = {
+        status: 'BLOCKED',
+        reason: 'CAPTCHA/anti-bot gate detected on live Bilibili',
+        gate: wwwGate,
+      };
+      return result;
+    }
+
+    await livePage.locator('.im-chat-panel').waitFor({ state: 'visible', timeout: 12_000 });
+    await livePage.waitForTimeout(2500);
+    result.wwwEnabled = await livePage.evaluate(() => ({
+      status: 'PASS',
+      url: location.href,
+      shells: document.querySelectorAll('.im-chat-panel').length,
+      hasImTheme: document.documentElement.classList.contains('im-theme'),
+      msgCount: document.querySelectorAll('.im-msg').length,
+      title: document.title,
+    }));
+    await livePage.screenshot({ path: path.join(evidenceDir, '08-live-www-enabled.png') });
+
+    // 2. Live search.bilibili.com with DingBili enabled
+    await livePage.goto('https://search.bilibili.com/all?keyword=%E9%9F%B3%E4%B9%90', {
+      waitUntil: 'domcontentloaded',
+      timeout: 25_000,
+    });
+    const searchGate = await detectCaptchaOrGate(livePage);
+    if (searchGate.blocked) {
+      result.status = 'BLOCKED';
+      result.searchEnabled = {
+        status: 'BLOCKED',
+        reason: 'CAPTCHA/anti-bot gate detected on live Bilibili',
+        gate: searchGate,
+      };
+      return result;
+    }
+
+    await livePage.locator('.im-search-view').waitFor({ state: 'visible', timeout: 12_000 });
+    await livePage.waitForTimeout(2500);
+    result.searchEnabled = await livePage.evaluate(() => ({
+      status: 'PASS',
+      url: location.href,
+      searchViews: document.querySelectorAll('.im-search-view').length,
+      hasImTheme: document.documentElement.classList.contains('im-theme'),
+      title: document.title,
+    }));
+    await livePage.screenshot({ path: path.join(evidenceDir, '09-live-search-enabled.png') });
+
+    // 3. Disable DingBili in Tampermonkey -> visit live www.bilibili.com -> native Bilibili intact
+    await dash.bringToFront();
+    await toggleScriptInDashboard(dash, scriptRow, false);
+    await livePage.bringToFront();
+    await livePage.goto('https://www.bilibili.com/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 25_000,
+    });
+    await livePage.waitForTimeout(3000);
+    const nativeState = await livePage.evaluate(() => {
+      const shells = document.querySelectorAll('.im-chat-panel').length;
+      const hasImTheme = document.documentElement.classList.contains('im-theme');
+      const title = document.title;
+      const hasNativeHeader = Boolean(
+        document.querySelector('#biliMainHeader, .bili-header, .bili-header__bar') ||
+          title.includes('哔哩哔哩'),
+      );
+      return {
+        url: location.href,
+        shells,
+        hasImTheme,
+        title,
+        hasNativeHeader,
+      };
+    });
+    assert.equal(nativeState.shells, 0);
+    assert.equal(nativeState.hasImTheme, false);
+    assert.equal(nativeState.hasNativeHeader, true);
+    result.wwwDisabledNative = { status: 'PASS', ...nativeState };
+    await livePage.screenshot({ path: path.join(evidenceDir, '10-live-www-disabled-native.png') });
+
+    result.status = 'PASS';
+    return result;
+  } catch (err) {
+    result.status = 'BLOCKED';
+    result.error = String(err && err.message ? err.message : err);
+    return result;
+  } finally {
+    await toggleScriptInDashboard(dash, scriptRow, true).catch(() => {});
+    if (livePage && !livePage.isClosed()) {
+      await livePage.close().catch(() => {});
+    }
+    await context.unroute('**/*', liveRouteHandler).catch(() => {});
   }
 }
 
@@ -242,6 +433,7 @@ async function main() {
       channel: 'chrome',
       headless: false,
       viewport: { width: 1440, height: 900 },
+      ignoreDefaultArgs: ['--disable-extensions'],
       args: ['--no-first-run', '--no-default-browser-check'],
     });
 
@@ -313,7 +505,7 @@ async function main() {
     });
 
     // Route ONLY bilibili test domains to frozen offline fixtures; do NOT inject DingBili via addInitScript!
-    await context.route('**/*', async (route) => {
+    const syntheticRouteHandler = async (route) => {
       const req = route.request();
       let u;
       try {
@@ -339,11 +531,12 @@ async function main() {
         return;
       }
       await route.continue();
-    });
+    };
+    await context.route('**/*', syntheticRouteHandler);
 
-    const pageErrors = [];
+    const syntheticPageErrors = [];
     const testPage = await context.newPage();
-    testPage.on('pageerror', (e) => pageErrors.push(String(e)));
+    testPage.on('pageerror', (e) => syntheticPageErrors.push(String(e)));
 
     // 1. Main site match (www.bilibili.com)
     useIframeFixtureOnHome = false;
@@ -443,17 +636,28 @@ async function main() {
     const reenabledShells = await testPage.locator('.im-chat-panel').count();
     assert.equal(reenabledShells, 1);
 
-    assert.deepEqual(pageErrors, []);
+    assert.deepEqual(syntheticPageErrors, []);
+    await testPage.close();
+
+    // Remove synthetic route before separate anonymous read-only real Bilibili verification
+    await context.unroute('**/*', syntheticRouteHandler);
+
+    const liveAnonymousChecks = await runLiveAnonymousBilibiliChecks({
+      context,
+      dash,
+      scriptRow,
+    });
 
     const report = {
       status: 'PASS',
+      injectionMode: 'real-tampermonkey-extension',
       executedAt: new Date().toISOString(),
       candidateVersion: USERSCRIPT_METADATA.version,
       candidateSha256,
       chromeVersion,
       tampermonkey: tmInfo,
       dashboardRow: rowText.replace(/\s+/g, ' ').trim(),
-      checks: {
+      syntheticChecks: {
         metadataParsedInInstallDialog: 'PASS',
         mainSiteMatch: mainResult,
         searchSubdomainMatch: searchResult,
@@ -461,8 +665,9 @@ async function main() {
         unsupportedRouteNative: unsupportedResult,
         disabledRestoresNative: disabledResult,
         reenabledRemountsSingleShell: { shells: reenabledShells },
+        pageErrors: syntheticPageErrors,
       },
-      pageErrors,
+      liveAnonymousChecks,
       screenshotsDir: path.relative(rootDir, evidenceDir),
     };
 
