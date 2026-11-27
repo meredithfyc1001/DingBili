@@ -28,8 +28,8 @@
 | `A02-REAL-TM-SYNTHETIC` | `CB74868A...263C` | Windows Chrome `158.0.8127.37` + 真实 Tampermonkey `5.5.1` MV3 × 合成样本 | F2 / F4 / Dashboard 停用 | 从隔离配置安装 `v0.1.0-p1.2`，实测主站、`search`、iframe、`unsupported`、Dashboard 停用恢复原版、重新启用单壳 | 安装版本 `0.1.0-p1.2`、主站/搜索单壳、iframe `0` 壳、停用恢复 `Fixture Native`、0 `pageerror` | `injectionMode=real-tampermonkey-extension`；`dashboardRow="1 DingBili · B站钉钉皮肤 0.1.0-p1.2 614 KB 0 min"`；主站 `shells=1/msgCount=1`；搜索 `searchViews=1`；iframe `top=1/child=0`；停用后 `title="Fixture Native"` / `faviconHref="data:,native"` / `nativeButtonClicks=1`；重启用 `shells=1`；`pageErrors=[]` | `EV-P102-TM-SYN` | **PASS** |
 | `A02-REAL-TM-LIVE` | `CB74868A...263C` | Windows Chrome `158.0.8127.37` + 真实 Tampermonkey `5.5.1` MV3 × 匿名只读真实 B 站 | 停用复核 | 隔离配置访问真实 `www.bilibili.com/` 与 `search.bilibili.com/all?keyword=音乐`，并在 Dashboard 停用后重访 `www.bilibili.com/` | 主站与搜索单壳可用，停用后真实 B 站页面与顶栏完整可用 | `www.bilibili.com`: `shells=1`, `hasImTheme=true`, `msgCount=8`; `search.bilibili.com`: `searchViews=1`, `title="搜索 - 飞书"`; 停用后: `shells=0`, `hasImTheme=false`, `title="哔哩哔哩 (゜-゜)つロ 干杯~-bilibili"`, `hasNativeHeader=true`（被屏蔽非 GET/三方请求产生之 `livePageErrors` 已单列） | `EV-P102-TM-LIVE` | **PASS** |
 | `A02-FIREFOX` | `CB74868A...263C` | Windows 11 Firefox | 不适用 | Firefox 兼容测试 | 纳入 P1-08 兼容矩阵 | 本机未安装 Firefox，未执行 | `EV-P102-FF-NA` | **NOT TESTED** |
-| `A02-CI-LOCAL` | `CB74868A...263C` | Windows 11 本地等价 `ci.yml` 步骤 | 不适用 | 执行 `build`、`git diff --exit-code dist/DingBili.user.js`、`test:unit`、`verify:repro` | 全部通过且工作区产物无漂移 | 待提交后最终复验并写入 | `EV-P102-CI-LOCAL` | **PENDING_COMMIT** |
-| `A02-CI-GITHUB` | `CB74868A...263C` | GitHub Actions `CI / build-and-verify`（stacked PR `#2`） | 不适用 | 推送分支并创建 PR `#2` 后核查云端 Checks 状态 | 获取真实 PR 检查结果（如仍受账单阻塞则如实记录） | 待 Step 3 创建 PR `#2` 后更新 | `EV-P102-CI-GH` | **PENDING_PR** |
+| `A02-CI-LOCAL` | `CB74868A...263C` | Windows 11 本地等价 `ci.yml` 步骤（提交 `b99252f`） | 不适用 | 执行 `npm.cmd run build`、`git diff --exit-code dist/DingBili.user.js`、`npm.cmd run test:unit`、`npm.cmd run verify:repro` 并检查上游快照状态 | 全部通过且工作区产物无漂移 | 全部步骤退出码 0，`dist/DingBili.user.js` 与提交产物零差异，14/14 单测 PASS，双洁净构建 SHA-256 `CB74868A...263C` PASS | `EV-P102-CI-LOCAL` | **PASS** |
+| `A02-CI-GITHUB` | `CB74868A...263C` | GitHub PR 创建 & Actions `CI / build-and-verify` | 不适用 | 推送分支后调用 `browser` 子代理打开 Compare 页面创建叠栈 PR（base `feat/p1-01-baseline-build`）并检查云端 CI | 获取真实 `/pull/<number>` PR 与云端 CI 状态 | 分支已推送至 `origin/feat/p1-02-routing-lifecycle`；旧/新 `browser` 子代理均报错 `conversation is not open in any Hub window; please open this conversation in a Hub window and try again`（`BROWSER_HOST_FACTS: visited_origins=none`），且本机无 `gh` CLI，**PR 尚未创建**（Compare 入口仅作人工/后续创建参考：`https://github.com/meredithfyc1001/DingBili/compare/feat/p1-01-baseline-build...feat/p1-02-routing-lifecycle?expand=1`；另 GitHub Actions 账户账单阻塞仍待所有者处理） | `EV-P102-CI-GH-BLK` | **BLOCKED** |
 
 ### 边界与未混淆说明
 1. **合成测试 vs 真实用户脚本管理器 vs 匿名只读真实 B 站**：上述表项分别单独列出 Playwright `addInitScript`（24/24）、Tampermonkey `5.5.1` × 合成样本，与 Tampermonkey `5.5.1` × 匿名只读真实 B 站实测结果，未用任何一项替代另一项。
@@ -59,7 +59,9 @@
 
 ---
 
-## 三、阶段结论（提交与 PR 前）
+## 三、阶段验收结论
 
-- P1-02 所有工程实现、`tests/unit`（14/14）、双洁净目录可复现构建（SHA-256 `CB74868A33F85178CE8FDF43457A0D0D2AC9E87D83C93A349A790E0B60FF263C`）、Chrome+Edge 全量 E2E（24/24，含 P1-01 回归与 P1-02 新增 A02 全用例及 20 次往返压测）与真实 Chrome 158 + Tampermonkey `5.5.1` 验收（合成 + 匿名只读真实 B 站）已全部通过。
-- 下一步执行提交、本地 CI 复核、推送 `feat/p1-02-routing-lifecycle` 并在 GitHub 创建叠栈 PR `#2` 后更新最终 CI 与 PR 状态。
+- P1-02 所有本地工程实现、`tests/unit`（14/14）、双洁净目录可复现构建与本地 CI 等价检查（`b99252f`，SHA-256 `CB74868A33F85178CE8FDF43457A0D0D2AC9E87D83C93A349A790E0B60FF263C`）、Chrome+Edge 全量 E2E（24/24，含 P1-01 回归与 P1-02 新增 A02 全用例及 20 次往返压测）与真实 Chrome 158 + Tampermonkey `5.5.1` 验收（合成 + 匿名只读真实 B 站）已全部通过；分支已推送至 `origin/feat/p1-02-routing-lifecycle`。
+- **外部平台阻塞与未测范围**：
+  - `A02-CI-GITHUB`（GitHub PR 创建与云端 CI）：**BLOCKED** — 当前内置浏览器 Hub 未打开本会话窗口且本机未安装 `gh` CLI，无法自动创建 PR（未把 `/compare/...` 入口当作已创建 PR）；需在 Hub 窗口重新打开会话或由项目所有者手动通过 `https://github.com/meredithfyc1001/DingBili/compare/feat/p1-01-baseline-build...feat/p1-02-routing-lifecycle?expand=1` 创建以 `feat/p1-01-baseline-build` 为基的叠栈 PR，并处理 GitHub 账户账单/限额以便恢复 Actions Runner。
+  - `A02-FIREFOX`：**NOT TESTED**（本机未安装 Firefox，留待 P1-08）。
