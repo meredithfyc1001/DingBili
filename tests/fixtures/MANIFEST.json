@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "phase": "P1-01",
+  "frozenAt": "2026-11-27",
+  "sanitizationPolicy": "No real user cookies, credentials, session tokens, private user data, or external live media assets.",
+  "fixtures": [
+    {
+      "id": "FX-HOME",
+      "file": "tests/fixtures/home-feed.html",
+      "url": "https://www.bilibili.com/",
+      "purpose": "Homepage feed with ?p=2&t=23 card, dynamic duplicate/new card insertion, title mutation, card removal, native header interaction.",
+      "cases": ["A01.1", "T01", "T02", "T03", "F1-F4"]
+    },
+    {
+      "id": "FX-SEARCH",
+      "file": "tests/fixtures/search-results.html",
+      "url": "https://search.bilibili.com/all?keyword=%E9%9F%B3%E4%B9%90",
+      "purpose": "Search subdomain results with sort bar, .vui_pagenation next-page callback, and keyword matching local music channel.",
+      "cases": ["A01.1", "T04"]
+    },
+    {
+      "id": "FX-VIDEO",
+      "file": "tests/fixtures/video-detail.html",
+      "url": "https://www.bilibili.com/video/BV1ab1234567/",
+      "purpose": "Video detail with #bilibili-player, local synthetic WebM generator, nested open Shadow DOM bili-comments (rpid 1/2/3), expand and reply callbacks.",
+      "cases": ["A01.1", "T05", "T06"]
+    },
+    {
+      "id": "FX-UNSUPPORTED",
+      "file": "tests/fixtures/unsupported-page.html",
+      "url": "https://www.bilibili.com/unsupported",
+      "purpose": "Unsupported www.bilibili.com route for SPA exit, cold start, and native interactivity checks.",
+      "cases": ["A01.2", "T03", "F1-F4"]
+    },
+    {
+      "id": "FX-IFRAME",
+      "file": "tests/fixtures/iframe-host.html",
+      "url": "https://www.bilibili.com/",
+      "purpose": "Top-level matched page embedding matched child iframe to verify @noframes / top-frame guard.",
+      "cases": ["A01.2", "PB-09"]
+    },
+    {
+      "id": "FX-PERF",
+      "file": "tests/fixtures/perf-cards.js",
+      "url": "https://www.bilibili.com/",
+      "purpose": "Parametric generator for 30 and 300 unique av cards to replay T07 unrelated-mutation rescan probe.",
+      "cases": ["A01.1", "T07", "KF-07"]
+    }
+  ]
+}

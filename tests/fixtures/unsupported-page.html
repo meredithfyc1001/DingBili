@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Native Unsupported Page</title>
+  <link rel="icon" id="orig-unsupported" href="data:,native-unsupported" />
+</head>
+<body>
+  <main id="app">
+    <h1>原生未适配路由</h1>
+    <button id="native-btn" type="button">原生操作</button>
+    <input id="native-input" type="text" value="" />
+  </main>
+  <script>
+    window.__fixture = { nativeClicks: 0 };
+    document.getElementById('native-btn').addEventListener('click', () => {
+      window.__fixture.nativeClicks += 1;
+    });
+  </script>
+</body>
+</html>

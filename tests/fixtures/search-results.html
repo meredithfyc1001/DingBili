@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>音乐 - 哔哩哔哩_bilibili</title>
+  <link rel="icon" id="orig-search" href="data:,native-search" />
+</head>
+<body>
+  <main id="app">
+    <section id="sort-bar">
+      <button type="button" data-sort="default">综合排序</button>
+      <button type="button" data-sort="click">最多播放</button>
+      <button type="button" data-sort="pubdate">最新发布</button>
+      <button type="button" data-sort="dm">最多弹幕</button>
+      <button type="button" data-sort="stow">最多收藏</button>
+    </section>
+    <section id="search-cards">
+      <article class="bili-video-card" data-page="1">
+        <div class="bili-video-card__cover">
+          <img src="https://i0.hdslb.com/bfs/archive/search1.jpg@240w" alt="搜索封面1" />
+        </div>
+        <h3>
+          <a href="https://www.bilibili.com/video/BV1ab1234567/" title="音乐样本第一页视频">音乐样本第一页视频</a>
+        </h3>
+        <a href="https://space.bilibili.com/20001" class="bili-video-card__author">音乐作者甲 · 昨天</a>
+        <span class="bili-video-card__stats--text">123</span>
+      </article>
+    </section>
+    <nav class="vui_pagenation">
+      <button type="button" aria-label="上一页" disabled>上一页</button>
+      <button type="button" aria-current="page" id="page-indicator">1</button>
+      <button type="button" aria-label="下一页" id="next-page-btn">下一页</button>
+    </nav>
+  </main>
+  <script>
+    window.__fixture = {
+      nextClicks: 0,
+      sortClicks: [],
+      page: 1,
+    };
+    document.querySelectorAll('#sort-bar button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        window.__fixture.sortClicks.push(btn.textContent.trim());
+      });
+    });
+    document.getElementById('next-page-btn').addEventListener('click', () => {
+      window.__fixture.nextClicks += 1;
+      window.__fixture.page = 2;
+      const cards = document.getElementById('search-cards');
+      cards.innerHTML =
+        '<article class="bili-video-card" data-page="2">' +
+        '  <div class="bili-video-card__cover"><img src="https://i0.hdslb.com/bfs/archive/search2.jpg@240w" alt="搜索封面2" /></div>' +
+        '  <h3><a href="https://www.bilibili.com/video/BV3ef3456789/" title="音乐样本第二页视频">音乐样本第二页视频</a></h3>' +
+        '  <a href="https://space.bilibili.com/20002" class="bili-video-card__author">音乐作者乙 · 刚刚</a>' +
+        '  <span class="bili-video-card__stats--text">456</span>' +
+        '</article>';
+      document.getElementById('page-indicator').textContent = '2';
+    });
+  </script>
+</body>
+</html>

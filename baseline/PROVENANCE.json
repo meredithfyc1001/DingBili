@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "project": "DingBili",
+  "phase": "P1-01",
+  "frozenAt": "2026-11-27",
+  "directUpstream": {
+    "repository": "https://github.com/Jack-Cherish/BiliShu",
+    "branch": "main",
+    "commit": "da8b9722a778c94440e826a02559c8da3692b546",
+    "version": "0.6.1",
+    "entryFile": "bilishu.user.js",
+    "bytes": 597474,
+    "lines": 11586,
+    "sha256": "F4564526588ED6455ACFD2578357A5D2BADC388E3E7CF0FA97D43FED5613837E",
+    "snapshotPolicy": "read-only-unmodified"
+  },
+  "ancestor": {
+    "repository": "https://github.com/czm15053/linuxdo-idea-ui",
+    "commit": "88653fc24432f6dfc61b26d488afc74f05eb230c",
+    "modulesPorted": ["xhs/", "x/ video styles"],
+    "copyright": "Copyright (c) 2026 czm15053",
+    "license": "MIT"
+  },
+  "approvedUserscriptSurface": {
+    "match": [
+      "https://www.bilibili.com/*",
+      "https://search.bilibili.com/*"
+    ],
+    "grant": ["none"],
+    "runAt": "document-start",
+    "noframes": true,
+    "externalRuntimeDependencies": []
+  },
+  "assetInventory": {
+    "embeddedPngDataUris": {
+      "count": 18,
+      "sourceLines": "574-595",
+      "asciiLength": 80580,
+      "status": "inherited-from-upstream-pending-per-item-audit-before-public-release"
+    },
+    "inlineSvgIcons": {
+      "sourceLines": "752-952",
+      "status": "inherited-from-upstream"
+    },
+    "upstreamDemoGifs": {
+      "files": ["1.gif", "2.gif", "3.gif"],
+      "includedInDist": false,
+      "includedInDingBiliGit": false,
+      "reason": "Upstream demonstration assets without explicit third-party license attribution"
+    }
+  }
+}
