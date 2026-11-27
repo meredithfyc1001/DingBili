@@ -16,6 +16,8 @@
     "test:e2e": "playwright test",
     "test:e2e:chrome": "playwright test --project=chrome",
     "test:e2e:edge": "playwright test --project=msedge",
+    "setup:tm:chrome": "node scripts/setup-tampermonkey-chrome.mjs",
+    "test:tm:chrome": "node scripts/verify-tampermonkey-chrome.mjs",
     "test": "npm run build && npm run test:unit && npm run verify:repro && npm run test:e2e"
   },
   "devDependencies": {
