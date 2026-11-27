@@ -41,8 +41,15 @@ import {
   extractTweet as extractTweetBase
 } from "./parsers.js";
 import { USERSCRIPT_METADATA } from "../userscript/metadata.js";
+import { createLifecycleCoordinator } from "../core/lifecycle.js";
+import { createDocumentOwnership } from "../core/ownership.js";
 
 export function startBaselineRuntime() {
+  const ownership = createDocumentOwnership(document);
+  let lifecycle = null;
+  let activeSessionScope = null;
+  let activeImgModalClose = null;
+  let activeVideoModalClose = null;
   function isHideMedia() {
     try {
       return localStorage.getItem(HIDE_MEDIA_KEY) === "1";
@@ -635,8 +642,11 @@ export function startBaselineRuntime() {
     return true;
   }
   function nativeMode() {
+    if (lifecycle) {
+      lifecycle.enterNativeMode("native-mode");
+      return;
+    }
     setViewMode("native");
-    location.reload();
   }
   function clickNativeLogin() {
     nativeMode();
@@ -720,17 +730,22 @@ export function startBaselineRuntime() {
       updateTransform(true);
     });
     function close2() {
-      if (!modal.isConnected) return;
+      if (activeImgModalClose === close2) activeImgModalClose = null;
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (!modal.isConnected) {
+        if (activeImgModal === modal) activeImgModal = null;
+        return;
+      }
       modal.classList.remove("is-active");
       modal.classList.add("is-closing");
       setTimeout(() => {
         modal.remove();
         if (activeImgModal === modal) activeImgModal = null;
       }, 200);
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
     }
+    activeImgModalClose = close2;
     function onKeyDown(e) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -839,6 +854,11 @@ export function startBaselineRuntime() {
     if (multi) show(idx, false);
   }
   function closeImImageModal() {
+    if (activeImgModalClose) {
+      const fn = activeImgModalClose;
+      activeImgModalClose = null;
+      fn();
+    }
     if (activeImgModal) {
       activeImgModal.remove();
       activeImgModal = null;
@@ -856,11 +876,20 @@ export function startBaselineRuntime() {
       host.classList.remove("xim-video-lifted", "xim-video-inline");
       if (style == null) host.removeAttribute("style");
       else host.setAttribute("style", style);
-      if (parent == null ? void 0 : parent.isConnected) parent.insertBefore(host, (next == null ? void 0 : next.parentNode) === parent ? next : null);
+      if (parent == null ? void 0 : parent.isConnected) {
+        parent.insertBefore(host, (next == null ? void 0 : next.parentNode) === parent ? next : null);
+      } else if (host.isConnected) {
+        host.remove();
+      }
     } catch {
     }
   }
   function closeImVideoModal() {
+    if (activeVideoModalClose) {
+      const fn = activeVideoModalClose;
+      activeVideoModalClose = null;
+      fn();
+    }
     restoreParkedVideo();
     if (activeVideoModal) {
       activeVideoModal.remove();
@@ -1052,16 +1081,21 @@ export function startBaselineRuntime() {
     activeVideoModal = modal;
     requestAnimationFrame(() => modal.classList.add("is-active"));
     function close2() {
-      if (!modal.isConnected) return;
+      if (activeVideoModalClose === close2) activeVideoModalClose = null;
+      document.removeEventListener("keydown", onKeyDown);
       restoreParkedVideo();
+      if (!modal.isConnected) {
+        if (activeVideoModal === modal) activeVideoModal = null;
+        return;
+      }
       modal.classList.remove("is-active");
       modal.classList.add("is-closing");
       setTimeout(() => {
         modal.remove();
         if (activeVideoModal === modal) activeVideoModal = null;
       }, 200);
-      document.removeEventListener("keydown", onKeyDown);
     }
+    activeVideoModalClose = close2;
     function onKeyDown(e) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -7776,14 +7810,15 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
   function applyColorMode() {
     const html = document.documentElement;
     if (!html) return;
-    html.classList.toggle(DARK_CLASS, isDarkEffective());
-    html.setAttribute("data-xim-dark", isDarkEffective() ? "1" : "0");
-    html.style.colorScheme = isDarkEffective() ? "dark" : "light";
-    html.classList.add(ROOT_CLASS);
+    if (getViewMode() !== "im" || routeKind() === "other") return;
+    const dark = isDarkEffective();
+    ownership.toggleRootClass(DARK_CLASS, dark);
+    ownership.setRootAttr("data-xim-dark", dark ? "1" : "0");
+    ownership.setRootColorScheme(dark ? "dark" : "light");
+    ownership.addRootClass(ROOT_CLASS);
     for (const fn of listeners) fn();
   }
   let observer = null;
-  let applying = false;
   function svgHref(skin) {
     const s = SKINS[skin] || SKINS.dingtalk;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${s.accent}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="#fff" font-family="sans-serif">${s.letter}</text></svg>`;
@@ -7791,41 +7826,23 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
   }
   function makeFavicon() {
     const head = document.head;
-    if (!head || applying) return;
-    applying = true;
-    try {
-      const href = svgHref(currentSkinId());
-      for (const icon2 of head.querySelectorAll("link[rel='icon'], link[rel~='icon']")) {
-        if (icon2.id && icon2.id !== FAVICON_ID) icon2.removeAttribute("id");
-        if (icon2.getAttribute("href") !== href) icon2.setAttribute("href", href);
-      }
-      let link = document.getElementById(FAVICON_ID);
-      if (!link) {
-        link = document.createElement("link");
-        link.id = FAVICON_ID;
-        link.rel = "icon";
-        link.type = "image/svg+xml";
-        link.setAttribute("href", href);
-        head.appendChild(link);
-      } else if (link.getAttribute("href") !== href) {
-        link.setAttribute("href", href);
-      }
-      if (!observer) {
-        observer = new MutationObserver(() => {
-          if (applying) return;
-          if (document.getElementById(STYLE_ID)) makeFavicon();
-        });
-        observer.observe(head, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
-      }
-    } finally {
-      applying = false;
+    if (!head || ownership.isApplyingFavicon) return;
+    const href = svgHref(currentSkinId());
+    ownership.applyFavicon(href, { injectedId: FAVICON_ID });
+    if (!observer) {
+      observer = new MutationObserver(() => {
+        if (ownership.isApplyingFavicon) return;
+        ownership.notifyHostTitleMutation();
+        if (document.getElementById(STYLE_ID)) makeFavicon();
+      });
+      observer.observe(head, { childList: true, subtree: true, attributes: true, attributeFilter: ["href", "id"] });
+      activeSessionScope?.addObserver(observer);
     }
   }
   function removeFavicon() {
-    var _a;
     observer == null ? void 0 : observer.disconnect();
     observer = null;
-    (_a = document.getElementById(FAVICON_ID)) == null ? void 0 : _a.remove();
+    ownership.restoreFavicons();
   }
   let entryChecked = false;
   function chatIdFromRoute() {
@@ -7868,16 +7885,15 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
   function pinnedById(id) {
     return PINNED.find((p) => p.id === id) || PINNED[0];
   }
-  function patchHistory(onChange) {
-    for (const key of ["pushState", "replaceState"]) {
-      const old = history[key];
-      history[key] = function(...args) {
-        const out = old.apply(this, args);
-        onChange();
-        return out;
-      };
+  function scheduleResetChatMessages(delays = [600, 1500]) {
+    const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
+    const setT = activeSessionScope ? activeSessionScope.setTimeout : window.setTimeout;
+    for (const ms of delays) {
+      setT(() => {
+        if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
+        resetChatMessages();
+      }, ms);
     }
-    window.addEventListener("popstate", onChange);
   }
   let scope = "", scopeHost = null, serial = 0;
   let records = /* @__PURE__ */ new WeakMap();
@@ -8083,11 +8099,12 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
-  function installSearchCapture() {
+  function installSearchCapture(sessionScope) {
     const observed = /* @__PURE__ */ new WeakSet();
     const observers = [];
     const changed2 = () => document.dispatchEvent(new Event("bilishu-native-update"));
     const scan = (root) => {
+      if (!root) return;
       for (const el of root.querySelectorAll("*")) {
         if (!el.shadowRoot) continue;
         if (!observed.has(el.shadowRoot)) {
@@ -8095,20 +8112,30 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
           const observer2 = new MutationObserver(changed2);
           observer2.observe(el.shadowRoot, { childList: true, subtree: true, characterData: true });
           observers.push(observer2);
+          sessionScope == null ? void 0 : sessionScope.addObserver(observer2);
           changed2();
         }
         scan(el.shadowRoot);
       }
     };
-    const timer2 = window.setInterval(() => {
+    const scanHost = () => {
       const host = document.querySelector("bili-comments");
-      if (!host || !document.documentElement.classList.contains("im-theme")) return;
+      if (!host || !document.documentElement.classList.contains(ROOT_CLASS)) return;
       scan(host.parentNode);
-    }, 1e3);
-    window.addEventListener("pagehide", () => {
-      clearInterval(timer2);
-      observers.forEach((o) => o.disconnect());
-    }, { once: true });
+    };
+    if (sessionScope) {
+      sessionScope.setInterval(scanHost, 1e3);
+      sessionScope.onDispose(() => {
+        observers.forEach((o) => o.disconnect());
+        observers.length = 0;
+      });
+    } else {
+      const timer2 = window.setInterval(scanHost, 1e3);
+      window.addEventListener("pagehide", () => {
+        clearInterval(timer2);
+        observers.forEach((o) => o.disconnect());
+      }, { once: true });
+    }
   }
   function posterVideoSrc() {
     return "";
@@ -8266,8 +8293,11 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       panel.classList.add("im-has-native-editor");
       dock.querySelector(".im-native-comment-fallback").onclick = () => {
         restoreNativeCommentEditor();
-        setViewMode("native");
-        history.replaceState(history.state, "", location.href);
+        if (lifecycle) {
+          lifecycle.enterNativeMode("comment-fallback");
+        } else {
+          setViewMode("native");
+        }
       };
       dock.querySelector(".im-cancel-reply").onclick = () => {
         replyName = "";
@@ -8525,25 +8555,29 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     renderResults();
     view.querySelector("input").focus();
   }
+  function bindSearchHotkeys(sessionScope = activeSessionScope) {
+    if (bound$2) return;
+    bound$2 = true;
+    const onKeydown = (e) => {
+      if (!document.documentElement.classList.contains(ROOT_CLASS)) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        openSearchView();
+      } else if (e.key === "Escape" && view) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closeSearchView();
+      }
+    };
+    if (sessionScope) sessionScope.addListener(document, "keydown", onKeydown, true);
+    else document.addEventListener("keydown", onKeydown, true);
+  }
   function syncSearchView() {
     if (getViewMode() !== "im" || !document.documentElement.classList.contains(ROOT_CLASS)) {
       removeSearchView();
       return;
     }
-    if (!bound$2) {
-      bound$2 = true;
-      document.addEventListener("keydown", (e) => {
-        if (!document.documentElement.classList.contains(ROOT_CLASS)) return;
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-          e.preventDefault();
-          openSearchView();
-        } else if (e.key === "Escape" && view) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          closeSearchView();
-        }
-      }, true);
-    }
+    bindSearchHotkeys();
     const key = routeKind() === "search" ? routeKey() : "";
     if (key !== lastRoute) {
       const wasSearch = !!lastRoute;
@@ -8584,6 +8618,29 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     menu$1 = null;
     trigger == null ? void 0 : trigger.setAttribute("aria-expanded", "false");
   }
+  function bindCreateMenuListeners(sessionScope = activeSessionScope) {
+    if (bound$1) return;
+    bound$1 = true;
+    const onDocCreateClick = (e) => {
+      if (menu$1 && !menu$1.contains(e.target) && !e.target.closest(".im-create-trigger")) closeCreateMenu();
+    };
+    const onDocCreateKey = (e) => {
+      if (e.key === "Escape" && menu$1) {
+        e.preventDefault();
+        closeCreateMenu();
+        trigger == null ? void 0 : trigger.focus();
+      }
+    };
+    if (sessionScope) {
+      sessionScope.addListener(document, "click", onDocCreateClick);
+      sessionScope.addListener(document, "keydown", onDocCreateKey, true);
+      sessionScope.addListener(window, "resize", closeCreateMenu);
+    } else {
+      document.addEventListener("click", onDocCreateClick);
+      document.addEventListener("keydown", onDocCreateKey, true);
+      window.addEventListener("resize", closeCreateMenu);
+    }
+  }
   function toggleCreateMenu(button) {
     if (menu$1) {
       closeCreateMenu();
@@ -8610,20 +8667,7 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       }
       if (e.key === "Tab") closeCreateMenu();
     });
-    if (!bound$1) {
-      bound$1 = true;
-      document.addEventListener("click", (e) => {
-        if (menu$1 && !menu$1.contains(e.target) && !e.target.closest(".im-create-trigger")) closeCreateMenu();
-      });
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && menu$1) {
-          e.preventDefault();
-          closeCreateMenu();
-          trigger == null ? void 0 : trigger.focus();
-        }
-      }, true);
-      window.addEventListener("resize", closeCreateMenu);
-    }
+    bindCreateMenuListeners();
   }
   function bindTitlebarOnce(bar) {
     if (bar.dataset.bound === "1") return;
@@ -8922,9 +8966,7 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
         refreshHomeFeed();
         resetChatMessages();
         (_a2 = panel.querySelector(".im-feed-col")) == null ? void 0 : _a2.scrollTo(0, 0);
-        setTimeout(resetChatMessages, 600);
-        setTimeout(resetChatMessages, 1500);
-        setTimeout(resetChatMessages, 3e3);
+        scheduleResetChatMessages([600, 1500, 3e3]);
       });
       const body = panel.querySelector(".im-chat-body");
       const feed = body == null ? void 0 : body.querySelector(".im-feed-col");
@@ -9419,8 +9461,11 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
   let _feedSyncTimer = 0;
   function scheduleFeedSync() {
     if (_feedSyncTimer) return;
-    _feedSyncTimer = window.setTimeout(() => {
+    const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
+    const setT = activeSessionScope ? activeSessionScope.setTimeout : window.setTimeout;
+    _feedSyncTimer = setT(() => {
       _feedSyncTimer = 0;
+      if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
       syncChatMessages();
     }, 700);
   }
@@ -9457,8 +9502,10 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     return replies.length;
   }
   async function fillCommentsLater(noteId, el, loadedHref) {
+    const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
     for (let i = 0; i < 15; i++) {
-      await new Promise((r) => setTimeout(r, 260));
+      await new Promise((r) => (activeSessionScope ? activeSessionScope.setTimeout(r, 260) : setTimeout(r, 260)));
+      if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
       if (detailView !== el || !el.classList.contains("is-open") || !(detailRenderedHref == null ? void 0 : detailRenderedHref.includes(noteId))) return;
       if (i === 1) expandCommentSoft();
       const replies = collectNoteComments(noteId);
@@ -9468,13 +9515,16 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
         if (allHaveAvatar && i >= 2) break;
       }
     }
+    if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
     if ((lastThreadDetail == null ? void 0 : lastThreadDetail.id) === noteId) {
       lastThreadDetail.detail.commentsPending = false;
       if (!(lastThreadDetail.detail.replies || []).length) renderDetailThread(lastThreadDetail.detail);
     }
   }
   function expandCommentSoft() {
+    const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
     loadMoreComments(lastThreadDetail == null ? void 0 : lastThreadDetail.id).then((replies) => {
+      if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
       if (lastThreadDetail == null ? void 0 : lastThreadDetail.id) applyCommentBatch(lastThreadDetail.id, replies);
     }).catch(() => {
     });
@@ -10321,7 +10371,9 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       dbody.innerHTML = (pt ? threadPinHtml(pt) : `<div class="im-chat-empty"><p>正在加载视频…</p></div>`) + `<div class="im-detail-loading">正在加载评论区…</div>`;
       if (pt) (_a = dbody.querySelector(".im-thread-pin")) == null ? void 0 : _a.setAttribute("data-pin-id", status.id);
       const loadedHref = `/video/${status.id}/`;
+      const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
       fetchTweetDetail(status.id).then((detail) => {
+        if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
         if (detailView !== el || !el.classList.contains("is-open") || detailRenderedHref !== loadedHref && !detailRenderedHref.includes(status.id)) return;
         if (detail) {
           try {
@@ -10337,6 +10389,7 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
             <a class="im-native-open" href="/video/${status.id}/" target="_blank" rel="noopener">在B 站打开</a></div>`;
         }
       }).catch((err) => {
+        if (lifecycle && !lifecycle.isGenerationActive(reqGen)) return;
         console.error("[xhs-im:detail] 兜底 fetch 评论抛异常:", err && err.message);
         dbody.innerHTML = `<div class="im-chat-empty"><p>该视频加载失败（网络/接口错误）</p>
           <a class="im-native-open" href="/video/${status.id}/" target="_blank" rel="noopener">在B 站打开</a></div>`;
@@ -10709,8 +10762,7 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       }
       resetChatMessages();
       (_a = document.querySelector(".im-feed-col")) == null ? void 0 : _a.scrollTo(0, 0);
-      setTimeout(resetChatMessages, 600);
-      setTimeout(resetChatMessages, 1500);
+      scheduleResetChatMessages([600, 1500]);
     }
   }
   function refreshMaskedChrome() {
@@ -10723,7 +10775,6 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     const panel = document.querySelector(".im-list-panel");
     if (panel) renderListBody(panel);
   }
-  document.addEventListener("bilishu-colleague-change", syncListFromFeed);
   function ensureStrip() {
     var _a;
     const skin = SKINS[currentSkinId()];
@@ -10786,9 +10837,9 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       }
       const nat = e.target.closest("[data-mode='native']");
       if (nat) {
-        setViewMode("native");
         close();
-        location.reload();
+        if (lifecycle) lifecycle.enterNativeMode("skin-menu");
+        else setViewMode("native");
         return;
       }
       const item = e.target.closest("[data-skin]");
@@ -10818,51 +10869,56 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     }
     if (menu && !menu.contains(e.target)) close();
   }
-  function bindSkinButtons() {
+  function bindSkinButtons(sessionScope = activeSessionScope) {
     if (bound) return;
     bound = true;
-    document.addEventListener("click", onDocClick, true);
+    if (sessionScope) sessionScope.addListener(document, "click", onDocClick, true);
+    else document.addEventListener("click", onDocClick, true);
+  }
+  function removeNativeFab() {
+    var _a;
+    (_a = document.querySelector(".xim-fab")) == null ? void 0 : _a.remove();
   }
   function ensureNativeFab() {
-    var _a;
-    if (getViewMode() !== "native") {
-      (_a = document.querySelector(".xim-fab")) == null ? void 0 : _a.remove();
+    if (getViewMode() !== "native" || routeKind() === "other") {
+      removeNativeFab();
       return;
     }
     if (document.querySelector(".xim-fab")) return;
+    if (!document.body) return;
     const fab = document.createElement("button");
     fab.type = "button";
     fab.className = "xim-fab";
     fab.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:10001;height:38px;padding:0 16px;border-radius:19px;border:none;background:#1A87FF;color:#fff;font:700 14px/1 system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.22);display:flex;align-items:center;gap:6px;";
     fab.textContent = "⇄ 切回 IM";
     fab.title = "切回 IM 三合一界面";
+    fab.addEventListener("mousedown", (e) => e.preventDefault());
     fab.addEventListener("click", () => {
-      setViewMode("im");
-      location.reload();
+      if (lifecycle) lifecycle.enterImMode("native-fab");
+      else setViewMode("im");
     });
     document.body.appendChild(fab);
   }
   function applyRootAttrs() {
+    if (getViewMode() !== "im" || routeKind() === "other") return;
     const html = document.documentElement;
+    if (!html) return;
     const skin = currentSkinId();
-    html.classList.add(ROOT_CLASS, LOCK_CLASS);
-    html.setAttribute("data-xim-skin", skin);
-    html.setAttribute("data-xim-mask", isMaskAvatar() ? "1" : "0");
-    html.classList.toggle("im-hide-media", isHideMedia());
+    ownership.addRootClass(ROOT_CLASS);
+    ownership.addRootClass(LOCK_CLASS);
+    ownership.setRootAttr("data-xim-skin", skin);
+    ownership.setRootAttr("data-xim-mask", isMaskAvatar() ? "1" : "0");
+    ownership.toggleRootClass("im-hide-media", isHideMedia());
     applyColorMode();
     const s = SKINS[skin];
-    html.style.setProperty("--im-nav", s.railWidth + "px");
-    html.style.setProperty("--im-list", s.listWidth + "px");
-    html.style.setProperty("--im-header-h", s.titlebarHeight + "px");
-    html.style.setProperty("--im-strip", (s.stripWidth || 0) + "px");
-    html.style.setProperty("--im-nav2w", "0px");
+    ownership.setRootStyleProp("--im-nav", s.railWidth + "px");
+    ownership.setRootStyleProp("--im-list", s.listWidth + "px");
+    ownership.setRootStyleProp("--im-header-h", s.titlebarHeight + "px");
+    ownership.setRootStyleProp("--im-strip", (s.stripWidth || 0) + "px");
+    ownership.setRootStyleProp("--im-nav2w", "0px");
   }
   function clearRootAttrs() {
-    const html = document.documentElement;
-    html.classList.remove(ROOT_CLASS, LOCK_CLASS, "im-hide-media");
-    html.removeAttribute("data-xim-skin");
-    html.removeAttribute("data-xim-dark");
-    html.removeAttribute("data-xim-mask");
+    ownership.restoreRoot();
   }
   function ensureShell() {
     applyRootAttrs();
@@ -10877,79 +10933,59 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
     syncTitle();
   }
   function removeShell() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const removedContainers = [".im-titlebar", ".im-rail", ".im-strip", ".im-list-panel", ".im-chat-panel", ".im-search-view", ".im-create-menu", ".xim-skin-menu", ".im-detail", ".im-img-modal", ".im-video-modal"]
+      .map((s) => document.querySelector(s))
+      .filter(Boolean);
     closeColleagueChat();
     restoreNativeCommentEditor();
     removeSearchView();
     closeCreateMenu();
+    closeImImageModal();
     closeImVideoModal();
+    hideQuoteFloat();
+    if (quoteFloat) {
+      quoteFloat.remove();
+      quoteFloat = null;
+    }
     (_a = document.querySelector(".im-titlebar")) == null ? void 0 : _a.remove();
     (_b = document.querySelector(".im-rail")) == null ? void 0 : _b.remove();
     (_c = document.querySelector(".im-strip")) == null ? void 0 : _c.remove();
     (_d = document.querySelector(".im-list-panel")) == null ? void 0 : _d.remove();
     (_e = document.querySelector(".im-chat-panel")) == null ? void 0 : _e.remove();
     (_f = document.querySelector(".xim-skin-menu")) == null ? void 0 : _f.remove();
-    clearRootAttrs();
+    (_g = document.getElementById("xim-toast")) == null ? void 0 : _g.remove();
+    clearTimeout(toast._t);
+    toast._t = 0;
+    (_h = document.getElementById(STYLE_ID)) == null ? void 0 : _h.remove();
+    removeFavicon();
+    ownership.restoreAll(removedContainers);
   }
   function syncTitle() {
     if (!document.documentElement.classList.contains(ROOT_CLASS)) return;
     const skin = SKINS[currentSkinId()];
     const id = chatIdFromRoute();
     if (id === "search") {
-      document.title = `搜索 - ${skin.label}`;
+      ownership.setTitle(`搜索 - ${skin.label}`);
       return;
     }
     if (String(id).startsWith("user:")) {
-      document.title = `${id.slice(5)} - ${skin.label}`;
+      ownership.setTitle(`${id.slice(5)} - ${skin.label}`);
       return;
     }
     const pin = pinnedById(id.startsWith("note:") ? "explore" : id);
     const name = displayTitle("pin:" + pin.id, pin.name);
-    document.title = `${name} - ${skin.label}`;
+    ownership.setTitle(`${name} - ${skin.label}`);
   }
   function run() {
     if (!document.documentElement) {
       requestAnimationFrame(run);
       return;
     }
-    if (window.top !== window.self || routeKind() === "other") return;
-    document.addEventListener("play", (e) => {
-      if (getViewMode() === "im" && document.documentElement.classList.contains(ROOT_CLASS) && e.target.tagName === "VIDEO" && (document.documentElement.classList.contains("im-hide-media") || !e.target.closest(".xim-video-lifted"))) e.target.pause();
-    }, true);
-    new MutationObserver(() => {
-      if (getViewMode() !== "im" || !document.documentElement.classList.contains(ROOT_CLASS)) return;
-      document.querySelectorAll("video").forEach((v) => {
-        if (document.documentElement.classList.contains("im-hide-media") || !v.closest(".xim-video-lifted")) {
-          if (!v.paused) v.pause();
-        }
-      });
-    }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    if (window.top !== window.self) return;
     const version = USERSCRIPT_METADATA.version;
-    console.info(`[dingbili] v${version} (baseline 0.6.1) loaded, skin=${currentSkinId()}`);
-    installSearchCapture();
-    let shadowSyncTimer = 0;
-    document.addEventListener("bilishu-native-update", () => {
-      if (shadowSyncTimer || getViewMode() !== "im") return;
-      shadowSyncTimer = window.setTimeout(() => {
-        shadowSyncTimer = 0;
-        syncChatMessages();
-      }, 100);
-    });
-    if (typeof window !== "undefined" && window.matchMedia) {
-      try {
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
-      } catch {
-      }
-    }
-    let scheduled = false;
-    function scheduleApply() {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        applyTheme();
-      });
-    }
+    console.info(`[dingbili] v${version} (P1-02 lifecycle) loaded, skin=${currentSkinId()}`);
+
     function injectStyle() {
       let style = document.getElementById(STYLE_ID);
       if (!style) {
@@ -10958,47 +10994,125 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
         (document.head || document.documentElement).appendChild(style);
       }
       style.textContent = skinCss();
+      activeSessionScope?.trackNode(style);
     }
-    function applyTheme() {
-      var _a, _b, _c;
-      const html = document.documentElement;
-      if (!html) return;
-      if (routeKind() === "other") {
-        removeShell();
-        (_a = document.getElementById(STYLE_ID)) == null ? void 0 : _a.remove();
-        removeFavicon();
+
+    let lastMountedPath = "";
+    let bodyObserverStarted = false;
+    let bodyWaitScheduled = false;
+
+    function startSessionObservers(sessionScope) {
+      const pauseBlockedVideos = () => {
+        if (getViewMode() !== "im" || !document.documentElement.classList.contains(ROOT_CLASS)) return;
+        document.querySelectorAll("video").forEach((v) => {
+          if (document.documentElement.classList.contains("im-hide-media") || !v.closest(".xim-video-lifted")) {
+            if (!v.paused) v.pause();
+          }
+        });
+      };
+
+      sessionScope.addListener(
+        document,
+        "play",
+        (e) => {
+          if (
+            getViewMode() === "im" &&
+            document.documentElement.classList.contains(ROOT_CLASS) &&
+            e.target &&
+            e.target.tagName === "VIDEO" &&
+            (document.documentElement.classList.contains("im-hide-media") || !e.target.closest(".xim-video-lifted"))
+          ) {
+            e.target.pause();
+          }
+        },
+        true,
+      );
+
+      const classMo = new MutationObserver(pauseBlockedVideos);
+      classMo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      sessionScope.addObserver(classMo);
+
+      installSearchCapture(sessionScope);
+
+      let shadowSyncTimer = 0;
+      const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
+      sessionScope.addListener(document, "bilishu-native-update", () => {
+        if (shadowSyncTimer || getViewMode() !== "im") return;
+        shadowSyncTimer = sessionScope.setTimeout(() => {
+          shadowSyncTimer = 0;
+          if (!lifecycle || !lifecycle.isGenerationActive(reqGen)) return;
+          syncChatMessages();
+        }, 100);
+      });
+
+      sessionScope.addListener(document, "bilishu-colleague-change", syncListFromFeed);
+
+      if (typeof window !== "undefined" && window.matchMedia) {
+        try {
+          const mq = window.matchMedia("(prefers-color-scheme: dark)");
+          sessionScope.addListener(mq, "change", () => lifecycle?.scheduleSync("color-scheme"));
+        } catch {
+        }
+      }
+
+      bindSkinButtons(sessionScope);
+      bindSearchHotkeys(sessionScope);
+    }
+
+    function ensureBodyObserver(sessionScope) {
+      if (bodyObserverStarted || !document.body) return;
+      bodyObserverStarted = true;
+      let moTimer = 0;
+      const reqGen = lifecycle ? lifecycle.getGeneration() : 0;
+      const mo = new MutationObserver((records2) => {
+        if (!records2.some((r) => {
+          var _a;
+          return !((_a = r.target.nodeType === 1 ? r.target : r.target.parentElement) == null ? void 0 : _a.closest(".im-chat-panel,.im-list-panel,.im-rail,.im-strip,.im-titlebar,.xim-skin-menu,.im-search-view,.im-create-menu,.im-img-modal,.im-video-modal"));
+        })) return;
+        if (getViewMode() !== "im" || routeKind() === "other") return;
+        if (moTimer) return;
+        moTimer = sessionScope.setTimeout(() => {
+          moTimer = 0;
+          if (!lifecycle || !lifecycle.isGenerationActive(reqGen)) return;
+          syncChatMessages();
+          syncListFromFeed();
+          refreshMe();
+        }, 200);
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+      sessionScope.addObserver(mo);
+    }
+
+    function waitForBody(sessionScope) {
+      if (document.body || bodyWaitScheduled || sessionScope.isDisposed) return;
+      bodyWaitScheduled = true;
+      sessionScope.requestAnimationFrame(() => {
+        bodyWaitScheduled = false;
+        if (sessionScope.isDisposed) return;
+        if (document.body) {
+          lifecycle?.syncNow("body-ready");
+        } else {
+          waitForBody(sessionScope);
+        }
+      });
+    }
+
+    function renderActiveShell(sessionScope) {
+      injectStyle();
+      applyRootAttrs();
+      if (!document.body) {
+        waitForBody(sessionScope);
         return;
       }
-      applyColorMode();
-      if (getViewMode() !== "im") {
-        html.classList.remove(ROOT_CLASS);
-        (_b = document.getElementById(STYLE_ID)) == null ? void 0 : _b.remove();
-        removeShell();
-        removeFavicon();
-        ensureNativeFab();
-        return;
-      }
-      if (getViewMode() === "im") {
-        injectStyle();
-        applyRootAttrs();
-      }
-      if (!document.body) return;
+      ensureBodyObserver(sessionScope);
       const kind = routeKind();
-      if (kind === "compose" || kind === "other") {
-        removeChatPanel();
-        (_c = document.querySelector(".im-list-panel")) == null ? void 0 : _c.remove();
-        ensureTitlebar();
-        ensureRail();
-        bindSkinButtons();
-        syncTitle();
-        return;
-      }
+      if (kind === "compose" || kind === "other") return;
       setChatId(chatIdFromRoute());
       ensureShell();
       const pathKey = location.pathname + location.search;
-      if (applyTheme._path !== pathKey) {
-        const prev = applyTheme._path || "";
-        applyTheme._path = pathKey;
+      if (lastMountedPath !== pathKey) {
+        const prev = lastMountedPath;
+        lastMountedPath = pathKey;
         setChatId(chatIdFromRoute());
         if (prev !== pathKey) {
           closeColleagueChat();
@@ -11011,57 +11125,71 @@ html.im-theme .im-comment-thread-more:disabled {opacity:.55;cursor:wait;}
       syncChatMessages();
       syncTitle();
     }
+
     onColorThemeChange(() => {
-      if (getViewMode() !== "im") return;
+      if (!document.body || getViewMode() !== "im" || routeKind() === "other") return;
       ensureTitlebar();
       ensureRail();
       bindSkinButtons();
     });
-    function bootstrap() {
-      if (!document.documentElement) {
-        requestAnimationFrame(bootstrap);
-        return;
-      }
-      if (getViewMode() === "im") {
-        injectStyle();
-        applyRootAttrs();
-      }
-      if (!document.body) {
-        requestAnimationFrame(bootstrap);
-        return;
-      }
-      requestAnimationFrame(scheduleApply);
-      patchHistory(scheduleApply);
-      let moTimer = 0;
-      const mo = new MutationObserver((records2) => {
-        if (!records2.some((r) => {
-          var _a;
-          return !((_a = r.target.nodeType === 1 ? r.target : r.target.parentElement) == null ? void 0 : _a.closest(".im-chat-panel,.im-list-panel,.im-rail,.im-strip,.im-titlebar,.xim-skin-menu,.im-search-view,.im-create-menu"));
-        })) return;
-        if (getViewMode() !== "im") return;
-        if (moTimer) return;
-        moTimer = window.setTimeout(() => {
-          moTimer = 0;
-          syncChatMessages();
-          syncListFromFeed();
-          refreshMe();
-        }, 200);
-      });
-      const startObs = () => {
-        if (!document.body) {
-          requestAnimationFrame(startObs);
-          return;
-        }
-        mo.observe(document.body, { childList: true, subtree: true });
-      };
-      startObs();
-    }
-    if (getViewMode() === "im") applyRootAttrs();
+
+    lifecycle = createLifecycleCoordinator({
+      win: window,
+      doc: document,
+      getRouteKind: () => routeKind(),
+      getRouteKey: () => location.pathname + location.search,
+      getViewMode: () => getViewMode(),
+      setViewMode: (m) => setViewMode(m),
+      onMountSession({ sessionScope }) {
+        activeSessionScope = sessionScope;
+        bodyObserverStarted = false;
+        bodyWaitScheduled = false;
+        lastMountedPath = "";
+        ownership.captureFocus(".im-titlebar,.im-rail,.im-strip,.im-list-panel,.im-chat-panel,.im-search-view,.im-create-menu,.xim-skin-menu,.im-detail,.im-img-modal,.im-video-modal");
+        startSessionObservers(sessionScope);
+        renderActiveShell(sessionScope);
+      },
+      onRouteSync({ sessionScope }) {
+        if (!sessionScope || sessionScope.isDisposed) return;
+        activeSessionScope = sessionScope;
+        renderActiveShell(sessionScope);
+      },
+      onUnmountSession() {
+        removeShell();
+        bound = false;
+        bound$1 = false;
+        bound$2 = false;
+        lastMountedPath = "";
+        bodyObserverStarted = false;
+        bodyWaitScheduled = false;
+        detailRenderedHref = "";
+        lastThreadDetail = null;
+        commentPaging = false;
+        scope = "";
+        scopeHost = null;
+        pending = null;
+        _feedSyncTimer = 0;
+        quoteFloatHide = 0;
+        activeSessionScope = null;
+      },
+      onEnsureNativeFab: ensureNativeFab,
+      onRemoveNativeFab: removeNativeFab,
+    });
+
+    Object.defineProperty(window, "__dingbiliLifecycle", {
+      value: () => lifecycle.getState(),
+      configurable: true,
+    });
+
+    lifecycle.syncNow("init");
     if (document.readyState === "loading") {
-      if (getViewMode() === "im") injectStyle();
-      document.addEventListener("DOMContentLoaded", bootstrap);
-    } else {
-      bootstrap();
+      document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+          lifecycle.syncNow("domcontentloaded");
+        },
+        { once: true },
+      );
     }
   }
   run();

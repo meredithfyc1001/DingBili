@@ -32,8 +32,8 @@
 
 | 缺陷 ID | 关联风险 / P0 编号 | 归属阶段 | 当前 P1-01 基线失败表现 | 目标修复结果 |
 |---|---|---|---|---|
-| `KF-01` | R02 / T03 | P1-02 | 支持页 SPA `replaceState` 退出至未支持路径后，残留旧群标题、改写后的 favicon（原 `#orig` ID 丢失且 href 不匹配）、根类 `im-dark`、`style.colorScheme` 及 `--im-nav` | 按资源所有权逐项还原实改项，并保留站点在此期间的新写入（F1–F4） |
-| `KF-02` | R07 / T03 | P1-02 | 从未支持路径冷启动时未注册 History 监听，同文档 `pushState('/')` 进入首页后无法挂载外壳 | 分离文档级最小路由监听与页面级会话，冷启动进入支持页可正常挂载 |
+| `KF-01` | R02 / T03 | P1-02（已关闭） | 支持页 SPA `replaceState` 退出至未支持路径后，残留旧群标题、改写后的 favicon（原 `#orig` ID 丢失且 href 不匹配）、根类 `im-dark`、`style.colorScheme` 及 `--im-nav` | 已在 P1-02 修复：按资源所有权逐项还原实改项，并保留站点在此期间的新写入（F1–F4） |
+| `KF-02` | R07 / T03 | P1-02（已关闭） | 从未支持路径冷启动时未注册 History 监听，同文档 `pushState('/')` 进入首页后无法挂载外壳 | 已在 P1-02 修复：分离文档级最小路由监听与页面级会话，冷启动进入支持页可正常挂载 |
 | `KF-03` | R08 / T01、T04 | P1-03、P1-04 | 空配置默认皮肤为 `feishu` 而非 `dingtalk`；`www` 选定钉钉后首次进入空配置 `search.bilibili.com` 仍回退 `feishu` | `www` 与 `search` 空配置默认钉钉；首次从皮肤发起搜索时按契约沿用来源有效主题 |
 | `KF-04` | R08 / T04、DM3 | P1-04 | 搜索结果“群组”标签拼接 `https://www.bilibili.com` + 已含协议的分区 `path`，生成错误主机 `www.bilibili.comhttps` | 复用统一 URL 解析器，21 个分区群组均指向正确的 `www.bilibili.com` 路径 |
 | `KF-05` | R04 / DM2 | P1-04 | 普通推荐卡片 `extractTweet()` 以视频 ID 重建 `/video/{id}/`，丢失原始链接中的 `?p=2&t=23` 分 P 与起播参数 | 区分内容 ID 与播放目标 URL，完整保留合法路径、查询参数与片段 |
