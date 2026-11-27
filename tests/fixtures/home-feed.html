@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Native</title>
+  <link rel="icon" id="orig" href="data:,native" />
+</head>
+<body>
+  <header id="biliMainHeader">
+    <button id="native-header-action" type="button">原生按钮</button>
+    <input id="native-search-input" type="text" value="" />
+  </header>
+  <main id="app">
+    <article class="bili-video-card" data-fixture-card="1">
+      <div class="bili-video-card__cover">
+        <img src="https://i0.hdslb.com/bfs/archive/fixture1.jpg@240w" alt="封面1" />
+      </div>
+      <h3>
+        <a href="https://www.bilibili.com/video/BV1ab1234567/?p=2&amp;t=23" title="首页样本视频一">首页样本视频一</a>
+      </h3>
+      <a href="https://space.bilibili.com/10001" class="bili-video-card__author">样本作者 · 昨天</a>
+      <span class="bili-video-card__stats--text">123</span>
+    </article>
+  </main>
+  <script>
+    window.__fixture = {
+      nativeButtonClicks: 0,
+      addCard({ id, title, author = '样本作者二 · 刚刚', stats = '456', query = '' }) {
+        const app = document.getElementById('app');
+        const art = document.createElement('article');
+        art.className = 'bili-video-card';
+        art.dataset.fixtureCard = id;
+        art.innerHTML =
+          '<div class="bili-video-card__cover"><img src="https://i0.hdslb.com/bfs/archive/' + id + '.jpg@240w" alt="封面" /></div>' +
+          '<h3><a href="https://www.bilibili.com/video/' + id + '/' + query + '" title="' + title + '">' + title + '</a></h3>' +
+          '<a href="https://space.bilibili.com/10002" class="bili-video-card__author">' + author + '</a>' +
+          '<span class="bili-video-card__stats--text">' + stats + '</span>';
+        app.appendChild(art);
+        return art;
+      },
+      renameFirstCard(newTitle) {
+        const card = document.querySelector('article[data-fixture-card="1"]');
+        if (!card) return false;
+        const a = card.querySelector('h3 a');
+        if (a) {
+          a.setAttribute('title', newTitle);
+          a.textContent = newTitle;
+        }
+        return true;
+      },
+      removeCardById(id) {
+        const card = document.querySelector('article[data-fixture-card="' + id + '"]');
+        if (card) card.remove();
+        return Boolean(card);
+      },
+    };
+    document.getElementById('native-header-action').addEventListener('click', () => {
+      window.__fixture.nativeButtonClicks += 1;
+    });
+  </script>
+</body>
+</html>

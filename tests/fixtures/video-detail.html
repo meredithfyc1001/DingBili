@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta property="og:image" content="https://i0.hdslb.com/bfs/archive/detail-poster.jpg" />
+  <title>样本视频详情_哔哩哔哩</title>
+  <link rel="icon" id="orig-video" href="data:,native-video" />
+</head>
+<body>
+  <main id="app">
+    <section id="viewbox_report">
+      <h1 class="video-title" title="样本视频详情标题">样本视频详情标题</h1>
+      <div class="video-info-detail">
+        <a class="up-name" href="https://space.bilibili.com/30001">样本详情UP</a>
+        <span class="pubdate-text">2026-11-26 10:00:00</span>
+        <span class="view-text">1.2万</span>
+      </div>
+      <div class="video-toolbar">
+        <button type="button" class="video-like"><span class="video-like-info">88</span></button>
+        <button type="button" class="video-fav"><span class="video-fav-info">42</span></button>
+      </div>
+    </section>
+
+    <section id="player-origin">
+      <div id="bilibili-player" style="height:188px">
+        <video id="native-video" muted loop playsinline preload="auto" width="96" height="64"></video>
+      </div>
+      <div id="player-sibling">player-sibling</div>
+    </section>
+
+    <section id="comment-origin">
+      <bili-comments id="native-comments"></bili-comments>
+      <div id="comment-sibling">comment-sibling</div>
+    </section>
+  </main>
+
+  <script>
+    (function setupVideoAndCommentsFixture() {
+      const state = {
+        playCount: 0,
+        expandClicks: 0,
+        replyClicks: [],
+        publishClicks: 0,
+        likeClicks: 0,
+        origPlayer: document.getElementById('bilibili-player'),
+        origVideo: document.getElementById('native-video'),
+        origComments: document.getElementById('native-comments'),
+      };
+
+      state.origVideo.addEventListener('play', () => {
+        state.playCount += 1;
+      });
+
+      document.querySelector('.video-like').addEventListener('click', (e) => {
+        state.likeClicks += 1;
+        e.currentTarget.classList.toggle('on');
+      });
+
+      function buildCommentElement(tagName, { rpid, userName, content }) {
+        const el = document.createElement(tagName);
+        el.setAttribute('rpid', String(rpid));
+        const shadow = el.attachShadow({ mode: 'open' });
+
+        const header = document.createElement('div');
+        const user = document.createElement('a');
+        user.id = 'user-name';
+        user.href = 'https://space.bilibili.com/' + (40000 + Number(rpid));
+        user.textContent = userName;
+        header.appendChild(user);
+
+        const body = document.createElement('div');
+        body.id = 'contents';
+        body.textContent = content;
+
+        const footer = document.createElement('div');
+        footer.id = 'footer';
+        const replyBtn = document.createElement('button');
+        replyBtn.type = 'button';
+        replyBtn.textContent = '回复';
+        replyBtn.addEventListener('click', () => {
+          state.replyClicks.push(String(rpid));
+        });
+        footer.appendChild(replyBtn);
+
+        shadow.appendChild(header);
+        shadow.appendChild(body);
+        shadow.appendChild(footer);
+        return el;
+      }
+
+      // Build nested open Shadow DOM inside <bili-comments>
+      const commentsHost = state.origComments;
+      const commentsShadow = commentsHost.attachShadow({ mode: 'open' });
+
+      const commentBox = document.createElement('bili-comment-box');
+      const boxShadow = commentBox.attachShadow({ mode: 'open' });
+      const boxBody = document.createElement('div');
+      boxBody.id = 'body';
+      const editorInput = document.createElement('textarea');
+      editorInput.id = 'editor-textarea';
+      editorInput.placeholder = '发一条友善的评论';
+      boxBody.appendChild(editorInput);
+      const boxFooter = document.createElement('div');
+      boxFooter.id = 'footer';
+      const pubWrap = document.createElement('div');
+      pubWrap.id = 'pub';
+      const pubBtn = document.createElement('button');
+      pubBtn.type = 'button';
+      pubBtn.textContent = '发布';
+      pubBtn.addEventListener('click', () => {
+        state.publishClicks += 1;
+      });
+      pubWrap.appendChild(pubBtn);
+      boxFooter.appendChild(pubWrap);
+      boxShadow.appendChild(boxBody);
+      boxShadow.appendChild(boxFooter);
+
+      const thread = document.createElement('bili-comment-thread-renderer');
+      const threadShadow = thread.attachShadow({ mode: 'open' });
+      const rootComment = buildCommentElement('bili-comment-renderer', {
+        rpid: 1,
+        userName: '样本甲',
+        content: '一级样本',
+      });
+      const repliesContainer = document.createElement('div');
+      repliesContainer.id = 'replies';
+      const subComment2 = buildCommentElement('bili-comment-reply-renderer', {
+        rpid: 2,
+        userName: '样本乙',
+        content: '回复 @样本甲：二级样本',
+      });
+      const viewMore = document.createElement('div');
+      viewMore.id = 'view-more';
+      const expandBtn = document.createElement('button');
+      expandBtn.type = 'button';
+      expandBtn.textContent = '共2条回复';
+      expandBtn.addEventListener('click', () => {
+        state.expandClicks += 1;
+        const subComment3 = buildCommentElement('bili-comment-reply-renderer', {
+          rpid: 3,
+          userName: '样本丙',
+          content: '回复 @样本乙：后续样本',
+        });
+        repliesContainer.appendChild(subComment3);
+        viewMore.remove();
+        document.dispatchEvent(new CustomEvent('bilishu-native-update'));
+      });
+      viewMore.appendChild(expandBtn);
+
+      repliesContainer.appendChild(subComment2);
+      repliesContainer.appendChild(viewMore);
+      threadShadow.appendChild(rootComment);
+      threadShadow.appendChild(repliesContainer);
+
+      commentsShadow.appendChild(commentBox);
+      commentsShadow.appendChild(thread);
+
+      state.attachSyntheticMedia = async function attachSyntheticMedia() {
+        const video = state.origVideo;
+        const canvas = document.createElement('canvas');
+        canvas.width = 96;
+        canvas.height = 64;
+        canvas.style.cssText = 'position:fixed;left:0;top:0;width:96px;height:64px;opacity:0.01;pointer-events:none;z-index:-1';
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        let frame = 0;
+        const draw = () => {
+          ctx.fillStyle = frame % 2 === 0 ? '#1677ff' : '#36cfc9';
+          ctx.fillRect(0, 0, 96, 64);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect((frame * 7) % 80, 20, 14, 24);
+          frame += 1;
+        };
+        draw();
+        const interval = setInterval(draw, 45);
+        const stream = canvas.captureStream(20);
+        const mimeCandidates = ['video/webm;codecs=vp8', 'video/webm'];
+        const mimeType = mimeCandidates.find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+        if (mimeType) {
+          const chunks = [];
+          const recorder = new MediaRecorder(stream, { mimeType });
+          recorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+          };
+          const done = new Promise((resolve) => {
+            recorder.onstop = resolve;
+          });
+          recorder.start(100);
+          await new Promise((r) => setTimeout(r, 650));
+          recorder.stop();
+          await done;
+          const blob = new Blob(chunks, { type: mimeType });
+          if (blob.size > 0) {
+            clearInterval(interval);
+            stream.getTracks().forEach((t) => t.stop());
+            canvas.remove();
+            video.src = URL.createObjectURL(blob);
+            video.load();
+            await new Promise((resolve, reject) => {
+              if (video.readyState >= 1) return resolve();
+              const timer = setTimeout(() => resolve(), 2500);
+              const onReady = () => {
+                clearTimeout(timer);
+                resolve();
+              };
+              video.addEventListener('loadeddata', onReady, { once: true });
+              video.addEventListener('loadedmetadata', onReady, { once: true });
+              video.addEventListener('error', () => {
+                clearTimeout(timer);
+                reject(new Error('Synthetic video failed to load'));
+              }, { once: true });
+            });
+            return { mode: 'blob', bytes: blob.size, readyState: video.readyState };
+          }
+        }
+        // Fallback: live local canvas MediaStream when headless MediaRecorder emits 0 bytes
+        video.srcObject = stream;
+        state._mediaCleanup = () => {
+          clearInterval(interval);
+          stream.getTracks().forEach((t) => t.stop());
+          canvas.remove();
+        };
+        return { mode: 'srcObject', bytes: 0, readyState: video.readyState };
+      };
+
+      window.__fixture = state;
+    })();
+  </script>
+</body>
+</html>
