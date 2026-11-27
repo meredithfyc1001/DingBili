@@ -22,7 +22,7 @@ export const APPROVED_GRANTS = Object.freeze(['none']);
 export const USERSCRIPT_METADATA = Object.freeze({
   name: 'DingBili · B站钉钉皮肤',
   namespace: 'https://github.com/meredithfyc1001/DingBili',
-  version: '0.1.0-p1.1',
+  version: '0.1.0-p1.2',
   author: 'DingBili contributors (derived from Jack-Cherish/BiliShu 0.6.1 & czm15053/linuxdo-idea-ui)',
   description:
     '基于 Jack-Cherish/BiliShu (0.6.1) 二次开发的钉钉风格 B 站浏览器增强脚本，保留钉钉、飞书与企业微信三套主题及 B 站原生视频、搜索与评论能力。',

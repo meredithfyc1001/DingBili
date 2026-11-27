@@ -171,12 +171,9 @@ test.describe('P1-01 Frozen Behavior Baseline & Single-File Build (A01)', () => 
 
       await selectSkinViaMenu('dingtalk');
 
-      // PB-02: Switch to native mode via menu -> reload -> native title, icon, interactive, FAB present
+      // PB-02: Switch to native mode via menu -> same-document clean restore -> reload persists native -> FAB restores IM
       await page.locator('.xim-skin-btn').first().click();
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-        page.locator('.xim-skin-menu [data-mode="native"]').click(),
-      ]);
+      await page.locator('.xim-skin-menu [data-mode="native"]').click();
       await expect(page.locator('.xim-fab')).toBeVisible();
       await expect(page.locator('.im-chat-panel')).toHaveCount(0);
       expect(await page.title()).toBe('Fixture Native');
@@ -184,12 +181,17 @@ test.describe('P1-01 Frozen Behavior Baseline & Single-File Build (A01)', () => 
       await page.click('#native-header-action');
       expect(await page.evaluate(() => window.__fixture.nativeButtonClicks)).toBe(1);
 
-      // Click FAB to restore DingTalk IM mode
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-        page.locator('.xim-fab').click(),
-      ]);
+      // F2 full reload persists native mode cleanly
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.xim-fab')).toBeVisible();
+      await expect(page.locator('.im-chat-panel')).toHaveCount(0);
+      await page.click('#native-header-action');
+      expect(await page.evaluate(() => window.__fixture.nativeButtonClicks)).toBe(1);
+
+      // Click FAB to restore DingTalk IM mode in same document
+      await page.locator('.xim-fab').click();
       await expect(page.locator('.im-chat-panel')).toBeVisible();
+      await expect(page.locator('.xim-fab')).toHaveCount(0);
       expect(await page.evaluate(() => localStorage.getItem('bilishu-im-skin'))).toBe('dingtalk');
 
       // KF-12 KNOWN FAILURE BASELINE (to be fixed in P1-07):
@@ -293,7 +295,7 @@ test.describe('P1-01 Frozen Behavior Baseline & Single-File Build (A01)', () => 
     }
   });
 
-  test('T03 / F1-F4 baseline / KF-01 / KF-02: SPA exit residuals, back remount, and cold-start unsupported->SPA failure', async ({ browser }) => {
+  test('T03 / F1-F4 / KF-01 & KF-02 fixed in P1-02: clean SPA exit, back remount, and cold-start unsupported->SPA mount', async ({ browser }) => {
     const { context, page, pageErrors } = await setupIsolatedContext(browser);
     try {
       // Seed DingTalk + dark color mode on www to match T03
@@ -311,32 +313,37 @@ test.describe('P1-01 Frozen Behavior Baseline & Single-File Build (A01)', () => 
       });
       await expect.poll(() => page.title()).toBe('科技数码交流群 - 钉钉');
 
-      // F1 SPA replaceState to unsupported route -> reproduces KF-01 residuals
+      // F1 SPA replaceState to unsupported route -> KF-01 FIXED in P1-02 (no residual title/favicon/root attrs/styles)
       await page.evaluate(() => {
         history.replaceState({}, '', '/unsupported');
       });
       await expect(page.locator('.im-chat-panel')).toHaveCount(0);
       await page.waitForTimeout(150);
 
-      const residual = await page.evaluate(() => ({
+      const restored = await page.evaluate(() => ({
         title: document.title,
         origIconById: document.getElementById('orig')?.getAttribute('href') ?? null,
+        hasInjectedFavicon: Boolean(document.getElementById('bilishu-favicon')),
         hasDarkClass: document.documentElement.classList.contains('im-dark'),
+        hasRootClass: document.documentElement.classList.contains('im-theme'),
         colorScheme: document.documentElement.style.colorScheme,
         imNavVar: document.documentElement.style.getPropertyValue('--im-nav'),
       }));
-      // KF-01 KNOWN FAILURE BASELINE (to be fixed in P1-02):
-      expect(residual.title).toBe('科技数码交流群 - 钉钉');
-      expect(residual.origIconById).toBeNull();
-      expect(residual.hasDarkClass).toBe(true);
-      expect(residual.colorScheme).toBe('dark');
-      expect(residual.imNavVar).toBe('56px');
+      expect(restored).toEqual({
+        title: 'Fixture Native',
+        origIconById: 'data:,native',
+        hasInjectedFavicon: false,
+        hasDarkClass: false,
+        hasRootClass: false,
+        colorScheme: '',
+        imNavVar: '',
+      });
 
       // F3 browser back remounts shell on supported route
       await page.goBack();
       await expect(page.locator('.im-chat-panel')).toBeVisible();
 
-      // F4 cold start on unsupported route -> same-document pushState('/') reproduces KF-02
+      // F4 cold start on unsupported route -> same-document pushState('/') -> KF-02 FIXED in P1-02 (mounts 1 shell)
       const cold = await setupIsolatedContext(browser);
       try {
         await cold.page.goto('https://www.bilibili.com/unsupported', { waitUntil: 'domcontentloaded' });
@@ -344,9 +351,7 @@ test.describe('P1-01 Frozen Behavior Baseline & Single-File Build (A01)', () => 
         await cold.page.evaluate(() => {
           history.pushState({}, '', '/');
         });
-        await cold.page.waitForTimeout(300);
-        // KF-02 KNOWN FAILURE BASELINE (to be fixed in P1-02): shell fails to mount
-        expect(await cold.page.locator('.im-chat-panel').count()).toBe(0);
+        await expect(cold.page.locator('.im-chat-panel')).toHaveCount(1);
         expect(cold.pageErrors).toEqual([]);
       } finally {
         await cold.context.close();
